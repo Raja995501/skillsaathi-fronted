@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   HOMEPAGE STYLES — ported verbatim from the approved SkillSaathi prototype
+   (1787118411610_index.html). Do NOT "clean up" or re-derive these into Tailwind
+   utilities — that risks subtle visual drift (spacing, gradient angles, shadow
+   values). Tailwind above is for all NEW pages/components going forward; this
+   block is what guarantees pixel-for-pixel homepage parity with the prototype.
+   ============================================================================ */
+
+:root{--blue:#1457e8;--navy:#10264d;--orange:#ff7a18;--bg:#f6f8fc;--card:#fff;--text:#172033;--muted:#667085;--green:#38a169}
+body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.ss-root button,.ss-root input,.ss-root select{font:inherit} .ss-root button{cursor:pointer;border:0}
+
+.nav{height:70px;background:#fff;border-bottom:1px solid #e8edf5;display:flex;align-items:center;justify-content:space-between;padding:0 6%;position:sticky;top:0;z-index:10}
+.logo{font-size:23px;font-weight:800;color:var(--navy)} .logo span{color:var(--orange)}
+.navlinks{display:flex;gap:24px}.navlinks button{background:none;color:#344054}.navlinks button:hover{color:var(--blue)}
+.btn{padding:12px 18px;border-radius:10px;font-weight:700}.primary{background:var(--blue);color:#fff}.secondary{background:#eef4ff;color:var(--blue)}
+.hero{padding:70px 6%;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;background:linear-gradient(135deg,#f8fbff,#eef4ff)}
+.badge{display:inline-block;background:#e7f0ff;color:var(--blue);padding:8px 12px;border-radius:30px;font-size:13px;font-weight:700}
+.hero h1{font-size:52px;line-height:1.05;margin:18px 0 15px}.hero h1 span{color:var(--orange)}
+.hero p{font-size:18px;line-height:1.7;color:var(--muted);max-width:650px}
+.actions{display:flex;gap:12px;margin:25px 0}.hero-card{background:#fff;border-radius:24px;padding:25px;box-shadow:0 20px 60px #183b7a18}
+.people{display:grid;grid-template-columns:1fr 1fr;gap:14px}.person{padding:18px;border-radius:16px;background:#f7f9fc;border:1px solid #e9edf4}.avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#1457e8,#ff7a18);color:white;display:grid;place-items:center;font-weight:800}
+.section{padding:55px 6%}.section h2{font-size:32px;margin:0 0 10px}.sub{color:var(--muted)}
+.searchbar{display:flex;gap:10px;margin:25px 0}.searchbar input{flex:1;padding:14px;border:1px solid #d9e0eb;border-radius:10px}
+.categories{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}.cat{background:#fff;padding:20px;border-radius:16px;border:1px solid #e8edf5;text-align:center;font-weight:700}.cat small{display:block;color:var(--muted);font-weight:400;margin-top:5px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.step,.feature{background:#fff;padding:24px;border-radius:18px;border:1px solid #e8edf5}.num{width:35px;height:35px;border-radius:10px;background:#eaf1ff;color:var(--blue);display:grid;place-items:center;font-weight:800}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.feature h3{margin-bottom:8px}.feature p{color:var(--muted);line-height:1.6}
+.footer{padding:35px 6%;background:#10264d;color:#fff;display:flex;justify-content:space-between}
+.modal{display:none;position:fixed;inset:0;background:#08152b88;z-index:30;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.modalbox{background:#fff;width:min(520px,100%);border-radius:20px;padding:28px}.modalbox input,.modalbox select{width:100%;padding:13px;margin:7px 0 13px;border:1px solid #d9e0eb;border-radius:9px}.close{float:right;background:none;font-size:22px}
+#toast{position:fixed;right:20px;bottom:20px;background:#10264d;color:#fff;padding:14px 18px;border-radius:10px;display:none}
+#toast.show{display:block}
+@media(max-width:850px){.navlinks{display:none}.hero{grid-template-columns:1fr;padding-top:45px}.hero h1{font-size:40px}.categories{grid-template-columns:repeat(2,1fr)}.steps,.features{grid-template-columns:1fr}.footer{display:block}}
