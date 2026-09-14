@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://skillsaathi-backend.onrender.com'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://skillsaathi-backend.onrender.com/api/v1'
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
