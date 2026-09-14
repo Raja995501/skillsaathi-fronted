@@ -1,13 +1,14 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://skillsaathi-backend.onrender.com/api/v1'
+// Base URL ko sirf domain par rakha hai taaki Axios path ko override na kare
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://skillsaathi-backend.onrender.com'
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
-// --- Token storage (kept in one place so AuthContext and this file always agree) ---
+// --- Token storage ---
 export const tokenStorage = {
   getAccessToken: () => localStorage.getItem('ss_access_token'),
   getRefreshToken: () => localStorage.getItem('ss_refresh_token'),
@@ -62,7 +63,6 @@ apiClient.interceptors.response.use(
       const refreshToken = tokenStorage.getRefreshToken()
       if (!refreshToken) throw error
 
-      // Corrected refresh URL with /api/v1 prefix
       const { data } = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, { refreshToken })
       const { accessToken, refreshToken: newRefreshToken } = data.data
 
