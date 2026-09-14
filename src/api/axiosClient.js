@@ -28,9 +28,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// On a 401, try ONE silent refresh-and-retry before giving up. Queues concurrent
-// requests that fail while a refresh is already in-flight, so a page that fires
-// 5 requests at once with an expired token doesn't trigger 5 separate refresh calls.
+// On a 401, try ONE silent refresh-and-retry before giving up.
 let isRefreshing = false
 let pendingQueue = []
 
@@ -64,7 +62,8 @@ apiClient.interceptors.response.use(
       const refreshToken = tokenStorage.getRefreshToken()
       if (!refreshToken) throw error
 
-      const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken })
+      // Corrected refresh URL with /api/v1 prefix
+      const { data } = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, { refreshToken })
       const { accessToken, refreshToken: newRefreshToken } = data.data
 
       tokenStorage.setTokens(accessToken, newRefreshToken)
