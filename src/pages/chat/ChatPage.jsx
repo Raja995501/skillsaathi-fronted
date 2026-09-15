@@ -197,7 +197,7 @@ export default function ChatPage() {
 
         {/* Sidebar: Mobile par active chat hone par hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
         <div
-          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
+          className={`w-full md:w-72 lg:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
             activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -392,14 +392,14 @@ export default function ChatPage() {
                   onChange={(e) => handleTyping(e.target.value)}
                   placeholder={connected ? 'Type a message...' : 'Connecting to server...'}
                   disabled={!connected}
-                  className="flex-1 min-w-0 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
+                  className="flex-1 w-full min-w-0 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
                 <button
                   type="submit"
                   disabled={!connected || !draft.trim()}
                   className="shrink-0 px-3.5 sm:px-5 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <span className="hidden sm:inline">Send</span>
+                  <span className="hidden md:inline">Send</span>
                   <span className="text-xs">➔</span>
                 </button>
               </form>
