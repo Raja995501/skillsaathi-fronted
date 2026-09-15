@@ -23,7 +23,6 @@ export default function ChatPage() {
 
   const currentUserId = user?.id || user?.userId || user?._id
 
-  // Fetch initial conversations
   useEffect(() => {
     let isMounted = true
     connectionApi.list('ACCEPTED').then((res) => {
@@ -34,19 +33,15 @@ export default function ChatPage() {
         setActiveId(list[0].id)
       }
     })
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [])
 
-  // Sync activeId with URL search parameters
   useEffect(() => {
     if (activeId) {
       setSearchParams({ connectionId: activeId }, { replace: true })
     }
   }, [activeId, setSearchParams])
 
-  // Fetch history when active conversation changes
   useEffect(() => {
     if (!activeId) return
     let isMounted = true
@@ -60,12 +55,9 @@ export default function ChatPage() {
     chatApi.markAsRead(activeId)
     setOtherTyping(false)
 
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [activeId])
 
-  // Real-time Subscriptions & Online Presence
   useEffect(() => {
     if (!connected) return
 
@@ -73,10 +65,7 @@ export default function ChatPage() {
       const targetUser = event.userId || event.id || event.senderId
       if (targetUser != null) {
         const isOnline = Boolean(event.online ?? event.status === 'ONLINE')
-        setOnlineUsers((prev) => ({
-          ...prev,
-          [String(targetUser)]: isOnline,
-        }))
+        setOnlineUsers((prev) => ({ ...prev, [String(targetUser)]: isOnline }))
       }
     })
 
@@ -85,9 +74,7 @@ export default function ChatPage() {
     }
 
     if (!activeId) {
-      return () => {
-        unsubPresence()
-      }
+      return () => { unsubPresence() }
     }
 
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
@@ -138,10 +125,8 @@ export default function ChatPage() {
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
-    
     const messageContent = draft.trim()
     setDraft('')
-    
     publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId })
     publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
   }
@@ -185,13 +170,12 @@ export default function ChatPage() {
 
   return (
     <DashboardLayout>
-      {/* Outer container with fixed calculated height and strict overflow prevention */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] flex overflow-hidden font-sans">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-140px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-160px)] flex overflow-hidden font-sans">
 
-        {/* Sidebar: Mobile par active chat hone par hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
+        {/* ✅ YAHAN CHANGE KIYA HAI: Sidebar ko lg:w-56 kar diya (pehle lg:w-80 tha) */}
         <div
-          className={`w-full md:w-64 lg:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
-            activeId ? 'hidden md:flex' : 'flex'
+          className={`w-full lg:w-56 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
+            activeId ? 'hidden lg:flex' : 'flex'
           }`}
         >
           <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0">
@@ -267,10 +251,10 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Chat Area: Mobile par bina activeId ke hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
+        {/* Chat Area */}
         <div
           className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${
-            !activeId ? 'hidden md:flex' : 'flex'
+            !activeId ? 'hidden lg:flex' : 'flex'
           }`}
         >
           {!activeConversation ? (
@@ -282,13 +266,12 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
-              {/* Header */}
               <div className="px-3 sm:px-5 py-3 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => setActiveId(null)}
-                    className="md:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
+                    className="lg:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
                     aria-label="Back to conversations"
                   >
                     ←
@@ -332,7 +315,6 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Message List */}
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {messages.map((m, idx) => {
                   const msgSender = m.senderId ?? m.sender ?? m.userId
@@ -378,7 +360,6 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Form - Ab yeh iPad par bhi perfect chalega */}
               <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
                 <input
                   value={draft}
@@ -392,7 +373,6 @@ export default function ChatPage() {
                   disabled={!connected || !draft.trim()}
                   className="shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  {/* Yahan change kiya: ab text sirf desktop (lg) par dikhega, iPad par sirf arrow */}
                   <span className="hidden lg:inline">Send</span>
                   <span className="text-xs">➔</span>
                 </button>
