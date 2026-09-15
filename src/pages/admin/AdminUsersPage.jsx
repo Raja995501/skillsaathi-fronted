@@ -1,174 +1,139 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { adminApi } from '../../api/adminApi'
 import { useToast } from '../../hooks/useToast.jsx'
 
-const TABS = ['OPEN', 'REVIEWED', 'DISMISSED']
+const PAGE_SIZE = 15
 
-export default function AdminReportsPage() {
+export default function AdminUsersPage() {
   const showToast = useToast()
-  const [activeTab, setActiveTab] = useState('OPEN')
-  const [reports, setReports] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [resolvingId, setResolvingId] = useState(null)
+  const [search, setSearch] = useState('')
+  const [users, setUsers] = useState(null)
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
-  const loadReports = useCallback(async (status) => {
-    setLoading(true)
-    setReports(null)
+  const load = async (searchTerm = search, pageToLoad = 0) => {
     try {
-      const res = await adminApi.listReports(status)
-      const data = res.data?.data || res.data
-      setReports(Array.isArray(data) ? data : [])
+      const { data } = await adminApi.listUsers(searchTerm || undefined, pageToLoad, PAGE_SIZE)
+      setUsers(data.data.content)
+      setTotalPages(data.data.totalPages)
+      setPage(pageToLoad)
     } catch (err) {
-      console.error('Failed to load reports:', err)
-      showToast(err.response?.data?.message || 'Failed to fetch moderation reports', 'error')
-      setReports([])
-    } finally { // <--- YAHAN SYNTAX ERROR THA (font-semibold ki jagah finally aayega)
-      setLoading(false)
-    }
-  }, [showToast])
-
-  useEffect(() => {
-    let isMounted = true
-    loadReports(activeTab)
-    return () => {
-      isMounted = false
-    }
-  }, [activeTab, loadReports])
-
-  const handleResolve = async (id, status) => {
-    if (resolvingId) return
-    setResolvingId(id)
-    try {
-      await adminApi.resolveReport(id, status)
-      showToast(`Report successfully marked as ${status.toLowerCase()}`, 'success')
-      await loadReports(activeTab)
-    } catch (err) {
-      console.error('Report status update failed:', err)
-      showToast(err.response?.data?.message || 'Could not update report status', 'error')
-    } finally {
-      setResolvingId(null)
+      showToast(err.response?.data?.message || 'Failed to load users', 'error')
     }
   }
 
-  const getStatusBadgeClass = (status) => {
-    switch (status) {
-      case 'OPEN':
-        return 'bg-amber-100 text-amber-800 border-amber-200'
-      case 'REVIEWED':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200'
-      case 'DISMISSED':
-        return 'bg-gray-100 text-gray-700 border-gray-200'
-      default:
-        return 'bg-gray-100 text-gray-600 border-gray-200'
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    load(search, 0)
+  }
+
+  const handleToggleBlock = async (u) => {
+    try {
+      if (u.blocked) await adminApi.unblockUser(u.id)
+      else await adminApi.blockUser(u.id)
+      showToast(u.blocked ? 'User unblocked' : 'User blocked')
+      load(search, page)
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Action failed')
     }
   }
 
   return (
     <AdminLayout>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight mb-1">
-          Reports Moderation
-        </h1>
-        <p className="text-xs sm:text-sm text-gray-500 font-medium">
-          Review user-reported flags, policy violations, and community complaints.
-        </p>
+      <h1 className="text-xl sm:text-2xl font-bold text-brand-navy mb-6">Manage Users</h1>
+
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-6">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email..."
+          className="w-full sm:flex-1 sm:max-w-sm px-4 py-2.5 rounded-lg border border-gray-200 text-sm outline-none focus:border-brand-blue"
+        />
+        <button
+          type="submit"
+          className="px-5 py-2.5 rounded-lg bg-brand-blue text-white text-sm font-semibold cursor-pointer hover:bg-blue-700 transition"
+        >
+          Search
+        </button>
+      </form>
+
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[650px]">
+          <thead className="bg-gray-50 text-left text-xs text-brand-muted uppercase">
+            <tr>
+              <th className="px-4 sm:px-5 py-3 font-semibold">Name</th>
+              <th className="px-4 sm:px-5 py-3 font-semibold">Email</th>
+              <th className="px-4 sm:px-5 py-3 font-semibold">Location</th>
+              <th className="px-4 sm:px-5 py-3 font-semibold">Rating</th>
+              <th className="px-4 sm:px-5 py-3 font-semibold">Status</th>
+              <th className="px-4 sm:px-5 py-3 font-semibold text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users?.map((u) => (
+              <tr key={u.id} className="border-t border-gray-50">
+                <td className="px-4 sm:px-5 py-3 font-medium text-brand-text whitespace-nowrap">{u.name}</td>
+                <td className="px-4 sm:px-5 py-3 text-brand-muted whitespace-nowrap">{u.email}</td>
+                <td className="px-4 sm:px-5 py-3 text-brand-muted whitespace-nowrap">
+                  {[u.city, u.state].filter(Boolean).join(', ') || '—'}
+                </td>
+                <td className="px-4 sm:px-5 py-3 text-brand-muted whitespace-nowrap">⭐ {u.averageRating ?? '0.00'}</td>
+                <td className="px-4 sm:px-5 py-3 whitespace-nowrap">
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      u.blocked ? 'bg-red-50 text-red-500' : 'bg-green-50 text-brand-green'
+                    }`}
+                  >
+                    {u.blocked ? 'Blocked' : 'Active'}
+                  </span>
+                  {!u.emailVerified && (
+                    <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-500">
+                      Unverified
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 sm:px-5 py-3 text-right whitespace-nowrap">
+                  <button
+                    onClick={() => handleToggleBlock(u)}
+                    className={`text-xs font-semibold cursor-pointer ${
+                      u.blocked ? 'text-brand-blue' : 'text-red-500'
+                    }`}
+                  >
+                    {u.blocked ? 'Unblock' : 'Block'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {users?.length === 0 && <p className="text-center text-sm text-brand-muted py-8">No users found</p>}
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4">
-        {TABS.map((t) => (
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-6">
           <button
-            key={t}
-            onClick={() => setActiveTab(t)}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-150 cursor-pointer ${
-              activeTab === t
-                ? 'bg-brand-blue text-white shadow-xs'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
+            onClick={() => load(search, page - 1)}
+            disabled={page === 0}
+            className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm font-medium disabled:opacity-40 cursor-pointer"
           >
-            {t.charAt(0) + t.slice(1).toLowerCase()}
+            ← Previous
           </button>
-        ))}
-      </div>
-
-      {/* Loading Skeleton */}
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse">
-              <div className="h-4 w-1/3 bg-gray-200 rounded mb-2" />
-              <div className="h-3 w-1/4 bg-gray-150 rounded mb-4" />
-              <div className="h-3 w-3/4 bg-gray-100 rounded" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && reports?.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center shadow-xs">
-          <div className="text-3xl mb-2">🚩</div>
-          <p className="text-sm font-bold text-gray-700">No {activeTab.toLowerCase()} reports</p>
-          <p className="text-xs text-gray-400 mt-1">
-            All user flags under this category have been resolved.
-          </p>
-        </div>
-      )}
-
-      {/* Reports List */}
-      {!loading && reports?.length > 0 && (
-        <div className="space-y-3">
-          {reports.map((r) => (
-            <div
-              key={r.id}
-              className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs hover:border-gray-200 transition-all duration-150"
-            >
-              <div className="flex justify-between items-start gap-3 mb-2">
-                <div>
-                  <p className="text-sm font-bold text-gray-900">
-                    <span className="text-brand-blue">{r.reportedByName || 'Anonymous'}</span> reported{' '}
-                    <span className="text-rose-600">{r.reportedUserName || 'User'}</span>
-                  </p>
-                  <p className="text-xs font-semibold text-gray-500 mt-0.5">
-                    Reason: <span className="text-gray-700">{r.reason || 'Unspecified'}</span>
-                  </p>
-                </div>
-                <span
-                  className={`text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${getStatusBadgeClass(
-                    r.status
-                  )}`}
-                >
-                  {r.status}
-                </span>
-              </div>
-
-              {r.description && (
-                <div className="bg-gray-50 rounded-xl p-3 text-xs sm:text-sm text-gray-700 mb-4 border border-gray-100">
-                  {r.description}
-                </div>
-              )}
-
-              {r.status === 'OPEN' && (
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handleResolve(r.id, 'REVIEWED')}
-                    disabled={resolvingId === r.id}
-                    className="px-3 py-1.5 rounded-xl bg-brand-blue text-white text-xs font-bold hover:bg-blue-700 transition disabled:opacity-50 active:scale-95 cursor-pointer"
-                  >
-                    {resolvingId === r.id ? 'Updating...' : 'Mark Reviewed'}
-                  </button>
-                  <button
-                    onClick={() => handleResolve(r.id, 'DISMISSED')}
-                    disabled={resolvingId === r.id}
-                    className="px-3 py-1.5 rounded-xl bg-gray-100 text-gray-700 border border-gray-200 text-xs font-bold hover:bg-gray-200 transition disabled:opacity-50 active:scale-95 cursor-pointer"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+          <span className="px-3 py-2 text-sm text-brand-muted">
+            Page {page + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => load(search, page + 1)}
+            disabled={page >= totalPages - 1}
+            className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm font-medium disabled:opacity-40 cursor-pointer"
+          >
+            Next →
+          </button>
         </div>
       )}
     </AdminLayout>
