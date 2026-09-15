@@ -69,7 +69,6 @@ export default function ChatPage() {
   useEffect(() => {
     if (!connected) return
 
-    // 1. Online Presence Subscription (Global for all users)
     const unsubPresence = subscribe('/topic/presence', (event) => {
       const targetUser = event.userId || event.id || event.senderId
       if (targetUser != null) {
@@ -81,7 +80,6 @@ export default function ChatPage() {
       }
     })
 
-    // Publish own online status immediately when connected
     if (currentUserId) {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
@@ -92,7 +90,6 @@ export default function ChatPage() {
       }
     }
 
-    // 2. Messages Subscription
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
       setMessages((prev) => {
         if (msg.id && prev.some((m) => m.id === msg.id)) return prev
@@ -104,7 +101,6 @@ export default function ChatPage() {
       }
     })
 
-    // 3. Typing Subscription
     const unsubTyping = subscribe(`/topic/connection.${activeId}.typing`, (event) => {
       const eventSender = event.userId ?? event.senderId ?? event.sender ?? event.id
       const isTypingState = event.typing ?? event.isTyping
@@ -114,7 +110,6 @@ export default function ChatPage() {
       }
     })
 
-    // 4. Read Receipts Subscription
     const unsubRead = subscribe(`/topic/connection.${activeId}.read`, () => {
       setMessages((prev) =>
         prev.map((m) => {
@@ -132,12 +127,10 @@ export default function ChatPage() {
     }
   }, [activeId, connected, subscribe, publish, currentUserId])
 
-  // Auto scroll to bottom safely when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Cleanup typing timeout on unmount
   useEffect(() => {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
@@ -197,7 +190,7 @@ export default function ChatPage() {
 
         {/* Sidebar: Mobile par active chat hone par hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
         <div
-          className={`w-full md:w-72 lg:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
+          className={`w-full md:w-64 lg:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
             activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -289,7 +282,7 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
-              {/* Header - Fixed shrink and padding for mobile/tablet */}
+              {/* Header */}
               <div className="px-3 sm:px-5 py-3 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                   <button
@@ -339,7 +332,7 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Message List - Strict flex-1 min-h-0 container to avoid overflow and clipping */}
+              {/* Message List */}
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {messages.map((m, idx) => {
                   const msgSender = m.senderId ?? m.sender ?? m.userId
@@ -385,21 +378,22 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Form - Locked shrink-0 */}
-              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0">
+              {/* Input Form - Ab yeh iPad par bhi perfect chalega */}
+              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
-                  placeholder={connected ? 'Type a message...' : 'Connecting to server...'}
+                  placeholder={connected ? 'Type a message...' : 'Connecting...'}
                   disabled={!connected}
-                  className="flex-1 w-full min-w-0 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
+                  className="flex-1 w-full min-w-0 px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
                 <button
                   type="submit"
                   disabled={!connected || !draft.trim()}
-                  className="shrink-0 px-3.5 sm:px-5 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  className="shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <span className="hidden md:inline">Send</span>
+                  {/* Yahan change kiya: ab text sirf desktop (lg) par dikhega, iPad par sirf arrow */}
+                  <span className="hidden lg:inline">Send</span>
                   <span className="text-xs">➔</span>
                 </button>
               </form>
