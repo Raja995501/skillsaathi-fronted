@@ -166,9 +166,14 @@ export default function ChatPage() {
   return (
     <DashboardLayout>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-130px)] flex overflow-hidden font-sans">
-        
+
         {/* Sidebar */}
-        <div className="w-80 border-r border-gray-100 flex flex-col shrink-0 bg-slate-50/40">
+        {/* Mobile: full-width, shown only when no conversation is active. Desktop (md+): fixed width, always shown. */}
+        <div
+          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
+            activeId ? 'hidden md:flex' : 'flex'
+          }`}
+        >
           <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between">
             <div>
               <h2 className="font-extrabold text-gray-900 text-lg tracking-tight">Messages</h2>
@@ -218,7 +223,7 @@ export default function ChatPage() {
                       )}
                     </div>
 
-                    <span 
+                    <span
                       className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 ${
                         isSelected ? 'border-[#4B2ECF]' : 'border-white'
                       } ${online ? 'bg-green-500' : 'bg-gray-300'}`}
@@ -243,9 +248,14 @@ export default function ChatPage() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-slate-50/20">
+        {/* Mobile: full-width, shown only when a conversation is active. Desktop (md+): always shown. */}
+        <div
+          className={`flex-1 flex-col min-w-0 bg-slate-50/20 w-full ${
+            activeId ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           {!activeConversation ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-3">
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-3 px-4 text-center">
               <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-2xl shadow-inner">
                 ✉️
               </div>
@@ -254,8 +264,18 @@ export default function ChatPage() {
           ) : (
             <>
               {/* Header */}
-              <div className="px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-3">
+              <div className="px-3 sm:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  {/* Back button - visible only on mobile, returns to the conversation list */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveId(null)}
+                    className="md:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                    aria-label="Back to conversations"
+                  >
+                    ←
+                  </button>
+
                   <div className="relative shrink-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4B2ECF] to-orange-400 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                       {activeConversation.otherUserProfilePicture ? (
@@ -264,15 +284,15 @@ export default function ChatPage() {
                         activeConversation.otherUserName?.[0]?.toUpperCase()
                       )}
                     </div>
-                    <span 
+                    <span
                       className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
                         isUserOnline(activeConversation.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
                       }`}
                     />
                   </div>
 
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-sm">{activeConversation.otherUserName}</h3>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-gray-900 text-sm truncate">{activeConversation.otherUserName}</h3>
                     {otherTyping ? (
                       <p className="text-xs text-[#4B2ECF] animate-pulse font-semibold flex items-center gap-1">
                         <span>typing</span>
@@ -295,7 +315,7 @@ export default function ChatPage() {
               </div>
 
               {/* Message List */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {messages.map((m, idx) => {
                   const msgSender = m.senderId ?? m.sender ?? m.userId
                   const isMine = String(msgSender) === String(currentUserId)
@@ -304,7 +324,7 @@ export default function ChatPage() {
                   return (
                     <div key={m.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div
-                        className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative group ${
+                        className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative group ${
                           isMine
                             ? 'bg-[#4B2ECF] text-white rounded-br-xs'
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
@@ -341,20 +361,20 @@ export default function ChatPage() {
               </div>
 
               {/* Input Form */}
-              <form onSubmit={handleSend} className="p-3.5 bg-white border-t border-gray-100 flex items-center gap-2">
+              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2">
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
                   placeholder={connected ? 'Type a message...' : 'Connecting to server...'}
                   disabled={!connected}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
+                  className="flex-1 min-w-0 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
                 <button
                   type="submit"
                   disabled={!connected || !draft.trim()}
-                  className="px-5 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  className="shrink-0 px-3.5 sm:px-5 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <span>Send</span>
+                  <span className="hidden sm:inline">Send</span>
                   <span className="text-xs">➔</span>
                 </button>
               </form>
