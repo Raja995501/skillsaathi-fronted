@@ -122,7 +122,7 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <FormField
           label="Full Name"
-          placeholder="e.g. Raja Kumar"
+          placeholder=""
           value={form.name}
           onChange={handleChange('name')}
           error={fieldErrors.name}
@@ -156,7 +156,7 @@ export default function RegisterPage() {
         <FormField
           label="Phone (Optional)"
           type="tel"
-          placeholder="e.g. 9955012023"
+          placeholder=" "
           value={form.phone}
           onChange={handleChange('phone')}
           error={fieldErrors.phone}
