@@ -61,14 +61,19 @@ export default function ChatPage() {
   useEffect(() => {
     if (!connected) return
 
+    // ✅ FIX: PresenceEventResponse ke hisaab se event.online read karo
     const unsubPresence = subscribe('/topic/presence', (event) => {
-      const targetUser = event.userId || event.id || event.senderId
+      const targetUser = event.userId
       if (targetUser != null) {
-        const isOnline = Boolean(event.online ?? event.status === 'ONLINE')
-        setOnlineUsers((prev) => ({ ...prev, [String(targetUser)]: isOnline }))
+        const isOnline = Boolean(event.online)
+        setOnlineUsers((prev) => ({
+          ...prev,
+          [String(targetUser)]: isOnline,
+        }))
       }
     })
 
+    // Apna presence online publish karo
     if (currentUserId) {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
@@ -113,6 +118,22 @@ export default function ChatPage() {
       unsubPresence()
     }
   }, [activeId, connected, subscribe, publish, currentUserId])
+
+  // ✅ Disconnect hone par offline publish karo
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (currentUserId) {
+        publish('/app/user.presence', { userId: currentUserId, online: false })
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (currentUserId) {
+        publish('/app/user.presence', { userId: currentUserId, online: false })
+      }
+    }
+  }, [currentUserId, publish])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -172,7 +193,6 @@ export default function ChatPage() {
     <DashboardLayout>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-140px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-160px)] flex overflow-hidden font-sans">
 
-        {/* ✅ YAHAN CHANGE KIYA HAI: Sidebar ko lg:w-56 kar diya (pehle lg:w-80 tha) */}
         <div
           className={`w-full lg:w-56 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
             activeId ? 'hidden lg:flex' : 'flex'
@@ -251,7 +271,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Chat Area */}
         <div
           className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${
             !activeId ? 'hidden lg:flex' : 'flex'
