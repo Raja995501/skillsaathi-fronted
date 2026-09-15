@@ -17,17 +17,13 @@ export default function DashboardLayout({ children }) {
   const navigate = useNavigate()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  // Robust Case-Insensitive Admin Check (Handles string, object, array, and nested authority)
   const checkIsAdmin = (u) => {
     if (!u) return false
-    
     const roleVal = u.role || u.roles || u.authorities
-    
     if (typeof roleVal === 'string') {
       const cleanRole = roleVal.toUpperCase()
       return cleanRole === 'ADMIN' || cleanRole === 'ROLE_ADMIN'
     }
-    
     if (Array.isArray(roleVal)) {
       return roleVal.some((r) => {
         const str = typeof r === 'string' ? r : r?.authority || r?.name || ''
@@ -35,12 +31,10 @@ export default function DashboardLayout({ children }) {
         return clean === 'ADMIN' || clean === 'ROLE_ADMIN'
       })
     }
-    
     if (typeof roleVal === 'object' && roleVal !== null) {
       const name = (roleVal.name || roleVal.authority || '').toUpperCase()
       return name === 'ADMIN' || name === 'ROLE_ADMIN'
     }
-
     return false
   }
 
@@ -58,11 +52,11 @@ export default function DashboardLayout({ children }) {
       {/* TOP NAVBAR */}
       <header className="h-[70px] bg-white border-b border-gray-100 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 shrink-0">
         
-        {/* Left: Brand Logo & Mobile Toggle */}
         <div className="flex items-center gap-3">
+          {/* Hamburger menu ab lg:hidden hai, taaki iPad par bhi dikhe */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl bg-gray-50 text-gray-700 text-lg font-bold border border-gray-100 active:scale-95"
+            className="lg:hidden p-2 rounded-xl bg-gray-50 text-gray-700 text-lg font-bold border border-gray-100 active:scale-95"
             aria-label="Toggle menu"
           >
             {isMobileMenuOpen ? '✕' : '☰'}
@@ -96,8 +90,8 @@ export default function DashboardLayout({ children }) {
           </div>
         </div>
 
-        {/* Center: Live Quick Highlights & Action Button (Desktop Only) */}
-        <div className="hidden md:flex items-center gap-4">
+        {/* Center: Desktop Only (ab lg:flex) */}
+        <div className="hidden lg:flex items-center gap-4">
           <div 
             onClick={() => navigate('/dashboard/matches')}
             className="flex items-center gap-2 bg-blue-50/70 text-[#4B2ECF] px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer hover:bg-blue-100/70 transition"
@@ -122,7 +116,6 @@ export default function DashboardLayout({ children }) {
           </button>
         </div>
 
-        {/* Right: Notifications & Profile Info */}
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <NotificationBell />
 
@@ -137,9 +130,7 @@ export default function DashboardLayout({ children }) {
                   src={avatarSrc} 
                   alt={user?.name || 'Profile'} 
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none'
-                  }}
+                  onError={(e) => { e.target.style.display = 'none' }}
                 />
               ) : (
                 user?.name?.[0]?.toUpperCase() || 'U'
@@ -157,18 +148,18 @@ export default function DashboardLayout({ children }) {
       {/* BODY CONTENT */}
       <div className="flex flex-1 relative min-h-[calc(100vh-70px)]">
         
-        {/* Mobile Sidebar Overlay */}
+        {/* Mobile Sidebar Overlay - ab lg:hidden */}
         {isMobileMenuOpen && (
           <div
             onClick={() => setIsMobileMenuOpen(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
           />
         )}
 
-        {/* Left Sidebar Navigation */}
+        {/* Left Sidebar - ab lg:sticky aur lg:translate-x-0 */}
         <aside
-          className={`fixed md:sticky top-[70px] left-0 h-[calc(100vh-70px)] w-64 bg-white border-r border-gray-100 flex flex-col shrink-0 justify-between z-50 transition-transform duration-300 ease-in-out ${
-            isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          className={`fixed lg:sticky top-[70px] left-0 h-[calc(100vh-70px)] w-64 bg-white border-r border-gray-100 flex flex-col shrink-0 justify-between z-50 transition-transform duration-300 ease-in-out ${
+            isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           }`}
         >
           <nav className="p-4 space-y-1.5 overflow-y-auto">
@@ -190,7 +181,6 @@ export default function DashboardLayout({ children }) {
               </NavLink>
             ))}
 
-            {/* Dynamic Admin Panel Link */}
             {isAdmin && (
               <NavLink
                 to="/admin"
@@ -219,7 +209,7 @@ export default function DashboardLayout({ children }) {
         </aside>
 
         {/* Main Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 max-w-full min-w-0">
+        <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-8 max-w-full min-w-0">
           {children}
         </main>
       </div>
