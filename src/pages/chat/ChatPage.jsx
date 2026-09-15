@@ -54,6 +54,7 @@ export default function ChatPage() {
     chatApi.getHistory(activeId).then((res) => {
       if (!isMounted) return
       const historyData = res.data?.data?.content || res.data?.data || []
+      // Reverse history safely so oldest is at top, newest at bottom
       setMessages([...historyData].reverse())
     })
 
@@ -71,7 +72,11 @@ export default function ChatPage() {
 
     // 1. Messages Subscription
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
-      setMessages((prev) => [...prev, msg])
+      setMessages((prev) => {
+        // Prevent duplicate messages if already added
+        if (msg.id && prev.some((m) => m.id === msg.id)) return prev
+        return [...prev, msg]
+      })
       const msgSender = msg.senderId ?? msg.sender ?? msg.userId
       if (String(msgSender) !== String(currentUserId)) {
         chatApi.markAsRead(activeId)
@@ -119,10 +124,10 @@ export default function ChatPage() {
     }
   }, [activeId, connected, subscribe, publish, currentUserId])
 
-  // Auto scroll to bottom
+  // Auto scroll to bottom only when messages update, avoid jumping on typing indicator
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, otherTyping])
+  }, [messages])
 
   // Cleanup typing timeout on unmount
   useEffect(() => {
@@ -132,8 +137,11 @@ export default function ChatPage() {
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
-    publish('/app/chat.send', { connectionId: activeId, content: draft.trim(), senderId: currentUserId })
+    
+    const messageContent = draft.trim()
     setDraft('')
+    
+    publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId })
     publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
   }
 
@@ -163,14 +171,26 @@ export default function ChatPage() {
     [onlineUsers]
   )
 
+  // Helper function to correctly format message time (fixes UTC/local timezone issues)
+  const formatMessageTime = (dateString) => {
+    if (!dateString) return ''
+    // If date string doesn't have 'Z' or offset, append 'Z' to treat as UTC correctly
+    let fixedDateString = dateString
+    if (typeof dateString === 'string' && !dateString.endsWith('Z') && !dateString.includes('+')) {
+      fixedDateString = dateString + 'Z'
+    }
+    const date = new Date(fixedDateString)
+    if (isNaN(date.getTime())) return ''
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+  }
+
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-130px)] flex overflow-hidden font-sans">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-130px)] flex overflow-hidden font-sans relative">
 
         {/* Sidebar */}
-        {/* Mobile: full-width, shown only when no conversation is active. Desktop (md+): fixed width, always shown. */}
         <div
-          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
+          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 absolute md:relative inset-0 z-10 md:z-auto transition-transform ${
             activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -248,9 +268,8 @@ export default function ChatPage() {
         </div>
 
         {/* Chat Area */}
-        {/* Mobile: full-width, shown only when a conversation is active. Desktop (md+): always shown. */}
         <div
-          className={`flex-1 flex-col min-w-0 bg-slate-50/20 w-full ${
+          className={`flex-1 flex-col min-w-0 bg-slate-50/25 w-full h-full absolute md:relative inset-0 z-20 md:z-auto ${
             activeId ? 'flex' : 'hidden md:flex'
           }`}
         >
@@ -264,13 +283,13 @@ export default function ChatPage() {
           ) : (
             <>
               {/* Header */}
-              <div className="px-3 sm:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs">
+              <div className="px-3 sm:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  {/* Back button - visible only on mobile, returns to the conversation list */}
+                  {/* Back button - visible only on mobile */}
                   <button
                     type="button"
                     onClick={() => setActiveId(null)}
-                    className="md:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                    className="md:hidden shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
                     aria-label="Back to conversations"
                   >
                     ←
@@ -339,7 +358,7 @@ export default function ChatPage() {
                         >
                           {m.createdAt && (
                             <span className="font-medium opacity-90">
-                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {formatMessageTime(m.createdAt)}
                             </span>
                           )}
 
@@ -349,7 +368,7 @@ export default function ChatPage() {
                                 <span className="text-sky-300 font-black tracking-tighter" title="Read">✓✓</span>
                               ) : (
                                 <span className="text-gray-300 opacity-80" title="Sent">✓</span>
-                              ) }
+                              )}
                             </span>
                           )}
                         </div>
@@ -361,7 +380,7 @@ export default function ChatPage() {
               </div>
 
               {/* Input Form */}
-              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2">
+              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0">
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
