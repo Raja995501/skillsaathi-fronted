@@ -54,7 +54,6 @@ export default function ChatPage() {
     chatApi.getHistory(activeId).then((res) => {
       if (!isMounted) return
       const historyData = res.data?.data?.content || res.data?.data || []
-      // Reverse history safely so oldest is at top, newest at bottom
       setMessages([...historyData].reverse())
     })
 
@@ -68,12 +67,34 @@ export default function ChatPage() {
 
   // Real-time Subscriptions & Online Presence
   useEffect(() => {
-    if (!activeId || !connected) return
+    if (!connected) return
 
-    // 1. Messages Subscription
+    // 1. Online Presence Subscription (Global for all users)
+    const unsubPresence = subscribe('/topic/presence', (event) => {
+      const targetUser = event.userId || event.id || event.senderId
+      if (targetUser != null) {
+        const isOnline = Boolean(event.online ?? event.status === 'ONLINE')
+        setOnlineUsers((prev) => ({
+          ...prev,
+          [String(targetUser)]: isOnline,
+        }))
+      }
+    })
+
+    // Publish own online status immediately when connected
+    if (currentUserId) {
+      publish('/app/user.presence', { userId: currentUserId, online: true })
+    }
+
+    if (!activeId) {
+      return () => {
+        unsubPresence()
+      }
+    }
+
+    // 2. Messages Subscription
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
       setMessages((prev) => {
-        // Prevent duplicate messages if already added
         if (msg.id && prev.some((m) => m.id === msg.id)) return prev
         return [...prev, msg]
       })
@@ -83,7 +104,7 @@ export default function ChatPage() {
       }
     })
 
-    // 2. Typing Subscription
+    // 3. Typing Subscription
     const unsubTyping = subscribe(`/topic/connection.${activeId}.typing`, (event) => {
       const eventSender = event.userId ?? event.senderId ?? event.sender ?? event.id
       const isTypingState = event.typing ?? event.isTyping
@@ -93,7 +114,7 @@ export default function ChatPage() {
       }
     })
 
-    // 3. Read Receipts Subscription
+    // 4. Read Receipts Subscription
     const unsubRead = subscribe(`/topic/connection.${activeId}.read`, () => {
       setMessages((prev) =>
         prev.map((m) => {
@@ -103,19 +124,6 @@ export default function ChatPage() {
       )
     })
 
-    // 4. Online Presence Subscription
-    const unsubPresence = subscribe('/topic/presence', (event) => {
-      const targetUser = event.userId || event.id
-      if (targetUser) {
-        setOnlineUsers((prev) => ({
-          ...prev,
-          [targetUser]: Boolean(event.online ?? event.status === 'ONLINE'),
-        }))
-      }
-    })
-
-    publish('/app/user.presence', { userId: currentUserId, online: true })
-
     return () => {
       unsubMessages()
       unsubTyping()
@@ -124,7 +132,7 @@ export default function ChatPage() {
     }
   }, [activeId, connected, subscribe, publish, currentUserId])
 
-  // Auto scroll to bottom only when messages update, avoid jumping on typing indicator
+  // Auto scroll to bottom safely when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -166,15 +174,13 @@ export default function ChatPage() {
   const isUserOnline = useCallback(
     (otherUserId) => {
       if (!otherUserId) return false
-      return onlineUsers[otherUserId] ?? false
+      return onlineUsers[String(otherUserId)] ?? false
     },
     [onlineUsers]
   )
 
-  // Helper function to correctly format message time (fixes UTC/local timezone issues)
   const formatMessageTime = (dateString) => {
     if (!dateString) return ''
-    // If date string doesn't have 'Z' or offset, append 'Z' to treat as UTC correctly
     let fixedDateString = dateString
     if (typeof dateString === 'string' && !dateString.endsWith('Z') && !dateString.includes('+')) {
       fixedDateString = dateString + 'Z'
@@ -186,7 +192,8 @@ export default function ChatPage() {
 
   return (
     <DashboardLayout>
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-130px)] flex overflow-hidden font-sans relative">
+      {/* Outer container with fixed calculated height and strict overflow prevention */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] flex overflow-hidden font-sans relative">
 
         {/* Sidebar */}
         <div
@@ -194,7 +201,7 @@ export default function ChatPage() {
             activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
-          <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between">
+          <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0">
             <div>
               <h2 className="font-extrabold text-gray-900 text-lg tracking-tight">Messages</h2>
               <p className="text-xs text-gray-400 font-medium">Active conversations</p>
@@ -258,7 +265,7 @@ export default function ChatPage() {
                       </p>
                     </div>
                     <p className={`text-xs truncate font-medium ${isSelected ? 'text-purple-100' : 'text-gray-400'}`}>
-                      {online ? 'Online' : 'Click to view chat history'}
+                      {online ? 'Online' : 'Offline'}
                     </p>
                   </div>
                 </button>
@@ -269,7 +276,7 @@ export default function ChatPage() {
 
         {/* Chat Area */}
         <div
-          className={`flex-1 flex-col min-w-0 bg-slate-50/25 w-full h-full absolute md:relative inset-0 z-20 md:z-auto ${
+          className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 w-full h-full absolute md:relative inset-0 z-20 md:z-auto ${
             activeId ? 'flex' : 'hidden md:flex'
           }`}
         >
@@ -282,21 +289,20 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
-              {/* Header */}
-              <div className="px-3 sm:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  {/* Back button - visible only on mobile */}
+              {/* Header - Fixed shrink and padding for mobile/tablet */}
+              <div className="px-3 sm:px-5 py-3 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => setActiveId(null)}
-                    className="md:hidden shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
+                    className="md:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
                     aria-label="Back to conversations"
                   >
                     ←
                   </button>
 
                   <div className="relative shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4B2ECF] to-orange-400 flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4B2ECF] to-orange-400 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                       {activeConversation.otherUserProfilePicture ? (
                         <img src={activeConversation.otherUserProfilePicture} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -304,13 +310,13 @@ export default function ChatPage() {
                       )}
                     </div>
                     <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+                      className={`absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-white ${
                         isUserOnline(activeConversation.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
                       }`}
                     />
                   </div>
 
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-gray-900 text-sm truncate">{activeConversation.otherUserName}</h3>
                     {otherTyping ? (
                       <p className="text-xs text-[#4B2ECF] animate-pulse font-semibold flex items-center gap-1">
@@ -333,8 +339,8 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Message List */}
-              <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
+              {/* Message List - Strict flex-1 min-h-0 container to avoid overflow and clipping */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {messages.map((m, idx) => {
                   const msgSender = m.senderId ?? m.sender ?? m.userId
                   const isMine = String(msgSender) === String(currentUserId)
@@ -349,7 +355,7 @@ export default function ChatPage() {
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
                         }`}
                       >
-                        <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap">{m.content}</p>
+                        <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
 
                         <div
                           className={`flex items-center gap-1 text-[10px] mt-1 ${
@@ -379,7 +385,7 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Form */}
+              {/* Input Form - Locked shrink-0 */}
               <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0">
                 <input
                   value={draft}
