@@ -193,11 +193,11 @@ export default function ChatPage() {
   return (
     <DashboardLayout>
       {/* Outer container with fixed calculated height and strict overflow prevention */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] flex overflow-hidden font-sans relative">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] flex overflow-hidden font-sans">
 
-        {/* Sidebar */}
+        {/* Sidebar: Mobile par active chat hone par hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
         <div
-          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 absolute md:relative inset-0 z-10 md:z-auto transition-transform ${
+          className={`w-full md:w-80 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
             activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -274,10 +274,10 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Chat Area */}
+        {/* Chat Area: Mobile par bina activeId ke hide rahegi, Tablet/Desktop (`md:`) par hamesha flex rahegi */}
         <div
-          className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 w-full h-full absolute md:relative inset-0 z-20 md:z-auto ${
-            activeId ? 'flex' : 'hidden md:flex'
+          className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${
+            !activeId ? 'hidden md:flex' : 'flex'
           }`}
         >
           {!activeConversation ? (
