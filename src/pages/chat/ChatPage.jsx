@@ -61,7 +61,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!connected) return
 
-    // ✅ FIX: PresenceEventResponse ke hisaab se event.online read karo
+    // ✅ PresenceEventResponse ke hisaab se event.online read karo
     const unsubPresence = subscribe('/topic/presence', (event) => {
       const targetUser = event.userId
       if (targetUser != null) {
@@ -73,8 +73,8 @@ export default function ChatPage() {
       }
     })
 
-    // Apna presence online publish karo
-    if (currentUserId) {
+    // ✅ Apna presence online publish karo (jab conversations load ho jayein)
+    if (currentUserId && conversations.length > 0) {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
 
@@ -117,7 +117,7 @@ export default function ChatPage() {
       unsubRead()
       unsubPresence()
     }
-  }, [activeId, connected, subscribe, publish, currentUserId])
+  }, [activeId, connected, subscribe, publish, currentUserId, conversations])
 
   // ✅ Disconnect hone par offline publish karo
   useEffect(() => {
