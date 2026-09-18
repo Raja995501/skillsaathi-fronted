@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="mainLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4B2ECF"/>
+      <stop offset="100%" stop-color="#FF7A00"/>
+    </linearGradient>
+  </defs>
+  
+  {/* S-shaped body */}
+  <path d="M 65,25 C 40,25 30,40 50,55 C 70,70 60,85 35,85" fill="none" stroke="url(#mainLogoGrad)" stroke-width="16" stroke-linecap="round"/>
+  
+  {/* Graduation Cap Top */}
+  <path d="M 50,10 L 75,22 L 50,34 L 25,22 Z" fill="#4B2ECF"/>
+</svg>
