@@ -58,6 +58,22 @@ export function AuthProvider({ children }) {
     return fullProfile ? { ...userInfo, ...fullProfile } : userInfo
   }
 
+  // ✅ Google Login Function
+  const googleLogin = async (googleToken) => {
+    const { data } = await authApi.googleLogin({ token: googleToken })
+    const loginData = data.data || data
+    const { accessToken, refreshToken, ...userInfo } = loginData
+    
+    tokenStorage.setTokens(accessToken, refreshToken)
+    
+    // Set initial user info with role received during Google login
+    setUser(userInfo)
+
+    // Instantly fetch full profile while merging role attributes
+    const fullProfile = await loadCurrentUser()
+    return fullProfile ? { ...userInfo, ...fullProfile } : userInfo
+  }
+
   const register = async (payload) => {
     return await authApi.register(payload)
   }
@@ -91,7 +107,18 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, isAuthenticated: !!user }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        loading, 
+        login, 
+        googleLogin,  // ✅ Google login function expose kiya
+        register, 
+        logout, 
+        refreshUser, 
+        isAuthenticated: !!user 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

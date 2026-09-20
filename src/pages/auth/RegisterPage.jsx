@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { GoogleLogin } from '@react-oauth/google'
 import AuthLayout from '../../components/auth/AuthLayout.jsx'
 import FormField from '../../components/shared/FormField.jsx'
 import Button from '../../components/shared/Button.jsx'
 import Alert from '../../components/shared/Alert.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 
-// Mirrors RegisterRequest's @Pattern on the backend (AuthServiceImpl) — checking client-side
-// too means the user gets instant feedback instead of a round-trip 400 for a weak password.
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function RegisterPage() {
-  const { register } = useAuth()
+  const { register, googleLogin } = useAuth()
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -27,12 +26,12 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   const handleChange = (field) => (e) => {
     const value = e.target.value
     setForm((f) => ({ ...f, [field]: value }))
 
-    // Clear field-specific error dynamically when user types
     if (fieldErrors[field]) {
       setFieldErrors((prev) => {
         const updated = { ...prev }
@@ -96,6 +95,22 @@ export default function RegisterPage() {
     }
   }
 
+  // ✅ Google Register Handler
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('')
+    setGoogleLoading(true)
+    try {
+      // Google se signup/login karein (backend automatically naya user bana dega)
+      await googleLogin(credentialResponse.credential)
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      console.error('Google signup error:', err)
+      setError(err.response?.data?.message || 'Google signup failed. Please try again.')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
   if (success) {
     return (
       <AuthLayout title="Check your email" subtitle="Account created successfully!">
@@ -118,6 +133,29 @@ export default function RegisterPage() {
       subtitle="Start teaching and learning with skilled peers across India."
     >
       {error && <Alert type="error">{error}</Alert>}
+
+      {/* ✅ Google Signup Button - Form ke upar */}
+      <div className="mb-4">
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => setError('Google signup failed. Please try again.')}
+          theme="outline"
+          size="large"
+          text="signup_with"
+          shape="rectangular"
+          width="100%"
+        />
+        {googleLoading && (
+          <p className="text-center text-xs text-gray-500 mt-2">Signing up with Google...</p>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3 my-4">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400 font-medium">OR</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <FormField

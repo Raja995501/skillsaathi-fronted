@@ -10,22 +10,23 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@mui/material": "^6.1.9",
+    "@react-oauth/google": "^0.13.5",
+    "@stomp/stompjs": "^7.0.0",
+    "axios": "^1.7.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^6.28.0",
-    "axios": "^1.7.9",
-    "@mui/material": "^6.1.9",
-    "@emotion/react": "^11.13.5",
-    "@emotion/styled": "^11.13.5",
-    "@stomp/stompjs": "^7.0.0",
     "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.3",
-    "tailwindcss": "^3.4.15",
-    "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.16.0"
+    "eslint": "^9.16.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^6.0.3"
   }
 }
