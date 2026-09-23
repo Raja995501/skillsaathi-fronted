@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/auth/LoginPage.jsx'
 import UserProfilePage from './pages/profile/UserProfilePage.jsx'
@@ -24,6 +25,21 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import { WebSocketProvider } from './context/WebSocketContext.jsx'
 
 function App() {
+  // Web Push Notification ke liye Service Worker register karna
+  useEffect(() => {
+    async function registerServiceWorker() {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        try {
+          const registration = await navigator.serviceWorker.register('/sw.js')
+          console.log('Service Worker registered successfully:', registration)
+        } catch (error) {
+          console.error('Service Worker registration failed:', error)
+        }
+      }
+    }
+    registerServiceWorker()
+  }, [])
+
   return (
     <ToastProvider>
       <AuthProvider>
