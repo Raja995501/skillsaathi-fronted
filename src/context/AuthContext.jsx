@@ -31,8 +31,13 @@ export function AuthProvider({ children }) {
       return profileData
     } catch (error) {
       console.error('Failed to load current user:', error)
-      tokenStorage.clear()
-      setUser(null)
+      
+      // ✅ FIX: Token tabhi clear hoga jab session actual mein expire ho (401 ya 403)
+      // Network error ya server down hone par token wipe nahi hoga
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        tokenStorage.clear()
+        setUser(null)
+      }
       return null
     } finally {
       setLoading(false)
@@ -102,6 +107,10 @@ export function AuthProvider({ children }) {
       return profileData
     } catch (error) {
       console.error('Error refreshing user profile:', error)
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        tokenStorage.clear()
+        setUser(null)
+      }
       return null
     }
   }
