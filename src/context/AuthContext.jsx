@@ -20,7 +20,6 @@ export function AuthProvider({ children }) {
       const { data } = await userApi.getMyProfile()
       const profileData = data.data || data
 
-      // Preserve existing role if backend profile response lacks role info
       setUser((prevUser) => {
         const mergedRole = profileData.role || profileData.roles || prevUser?.role || prevUser?.roles
         return {
@@ -32,9 +31,6 @@ export function AuthProvider({ children }) {
       return profileData
     } catch (error) {
       console.error('Failed to load current user:', error)
-
-      // ✅ FIX: Token tabhi clear hoga jab session actual mein expire ho (401 ya 403)
-      // Network error ya server down hone par token wipe nahi hoga
       if (error.response?.status === 401 || error.response?.status === 403) {
         tokenStorage.clear()
         setUser(null)
@@ -49,7 +45,21 @@ export function AuthProvider({ children }) {
     loadCurrentUser()
   }, [loadCurrentUser])
 
-  // ✅ NEW: Auto-subscribe to push when user is logged in (page refresh pe bhi)
+  // ✅ CROSS-TAB SYNC: Agar user doosre tab mein login/logout kare, toh yeh tab bhi auto-sync ho jaye
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key === 'ss_access_token') {
+        if (!event.newValue) {
+          setUser(null)
+        } else {
+          loadCurrentUser()
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [loadCurrentUser])
+
   useEffect(() => {
     if (user && tokenStorage.getAccessToken()) {
       subscribeToPush().catch((err) =>
@@ -64,14 +74,10 @@ export function AuthProvider({ children }) {
     const { accessToken, refreshToken, ...userInfo } = loginData
 
     tokenStorage.setTokens(accessToken, refreshToken)
-
-    // Set initial user info with role received during login
     setUser(userInfo)
 
-    // Instantly fetch full profile while merging role attributes
     const fullProfile = await loadCurrentUser()
 
-    // ✅ NEW: Push notification subscribe (non-blocking)
     subscribeToPush().catch((err) =>
       console.warn('Push subscription failed:', err)
     )
@@ -79,21 +85,16 @@ export function AuthProvider({ children }) {
     return fullProfile ? { ...userInfo, ...fullProfile } : userInfo
   }
 
-  // ✅ Google Login Function
   const googleLogin = async (googleToken) => {
     const { data } = await authApi.googleLogin({ token: googleToken })
     const loginData = data.data || data
     const { accessToken, refreshToken, ...userInfo } = loginData
 
     tokenStorage.setTokens(accessToken, refreshToken)
-
-    // Set initial user info with role received during Google login
     setUser(userInfo)
 
-    // Instantly fetch full profile while merging role attributes
     const fullProfile = await loadCurrentUser()
 
-    // ✅ NEW: Push notification subscribe (non-blocking)
     subscribeToPush().catch((err) =>
       console.warn('Push subscription failed:', err)
     )
@@ -108,11 +109,9 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     const refreshToken = tokenStorage.getRefreshToken()
     try {
-      // ✅ NEW: Push unsubscribe (non-blocking, before clearing tokens)
       unsubscribeFromPush().catch((err) =>
         console.warn('Push unsubscribe failed:', err)
       )
-
       if (refreshToken) await authApi.logout(refreshToken)
     } catch (error) {
       console.warn('Logout API call failed, clearing local tokens:', error)
