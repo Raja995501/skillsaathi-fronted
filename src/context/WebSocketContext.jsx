@@ -36,31 +36,46 @@ export function WebSocketProvider({ children }) {
       onStompError: (frame) => console.error('STOMP error:', frame.headers?.message),
     })
 
-    client.activate()
-    clientRef.current = client
+    try {
+      client.activate()
+      clientRef.current = client
+    } catch (err) {
+      console.error("WS Activation error:", err)
+    }
 
     return () => {
-      client.deactivate()
-      clientRef.current = null
+      if (clientRef.current) {
+        clientRef.current.deactivate()
+        clientRef.current = null
+      }
       setConnected(false)
     }
   }, [isAuthenticated])
 
   const subscribe = useCallback((destination, callback) => {
     if (!clientRef.current || !connected) return () => {}
-    const sub = clientRef.current.subscribe(destination, (message) => {
-      try {
-        callback(JSON.parse(message.body))
-      } catch {
-        callback(message.body)
-      }
-    })
-    return () => sub.unsubscribe()
+    try {
+      const sub = clientRef.current.subscribe(destination, (message) => {
+        try {
+          callback(JSON.parse(message.body))
+        } catch {
+          callback(message.body)
+        }
+      })
+      return () => sub.unsubscribe()
+    } catch (err) {
+      console.error("Subscribe error:", err)
+      return () => {}
+    }
   }, [connected])
 
   const publish = useCallback((destination, body) => {
     if (!clientRef.current || !connected) return
-    clientRef.current.publish({ destination, body: JSON.stringify(body) })
+    try {
+      clientRef.current.publish({ destination, body: JSON.stringify(body) })
+    } catch (err) {
+      console.error("Publish error:", err)
+    }
   }, [connected])
 
   return (

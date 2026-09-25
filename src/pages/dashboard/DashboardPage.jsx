@@ -12,7 +12,6 @@ export default function DashboardPage() {
   useEffect(() => {
     let isMounted = true
 
-    // Fetch all stats concurrently to avoid waterfall requests
     Promise.allSettled([
       matchApi.getMatches(),
       connectionApi.list('PENDING'),
@@ -31,6 +30,8 @@ export default function DashboardPage() {
         pending: getLength(pendingRes),
         connected: getLength(connectedRes),
       })
+    }).catch((err) => {
+      console.error("Dashboard stats fetch error:", err)
     })
 
     return () => {

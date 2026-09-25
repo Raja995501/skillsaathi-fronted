@@ -32,7 +32,8 @@ export default function ChatPage() {
       if (!activeId && list.length > 0) {
         setActiveId(list[0].id)
       }
-    })
+    }).catch((err) => console.error("Conversations fetch error:", err))
+
     return () => { isMounted = false }
   }, [])
 
@@ -50,9 +51,9 @@ export default function ChatPage() {
       if (!isMounted) return
       const historyData = res.data?.data?.content || res.data?.data || []
       setMessages([...historyData].reverse())
-    })
+    }).catch((err) => console.error("Chat history error:", err))
 
-    chatApi.markAsRead(activeId)
+    chatApi.markAsRead(activeId).catch(() => {})
     setOtherTyping(false)
 
     return () => { isMounted = false }
@@ -61,8 +62,8 @@ export default function ChatPage() {
   useEffect(() => {
     if (!connected) return
 
-    // ✅ PresenceEventResponse ke hisaab se event.online read karo
     const unsubPresence = subscribe('/topic/presence', (event) => {
+      if (!event) return
       const targetUser = event.userId
       if (targetUser != null) {
         const isOnline = Boolean(event.online)
@@ -73,27 +74,29 @@ export default function ChatPage() {
       }
     })
 
-    // ✅ Apna presence online publish karo (jab conversations load ho jayein)
-    if (currentUserId && conversations.length > 0) {
+    if (currentUserId && conversations?.length > 0) {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
 
     if (!activeId) {
-      return () => { unsubPresence() }
+      return () => { if (unsubPresence) unsubPresence() }
     }
 
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
+      if (!msg) return
       setMessages((prev) => {
-        if (msg.id && prev.some((m) => m.id === msg.id)) return prev
-        return [...prev, msg]
+        const currentList = Array.isArray(prev) ? prev : []
+        if (msg.id && currentList.some((m) => m.id === msg.id)) return currentList
+        return [...currentList, msg]
       })
       const msgSender = msg.senderId ?? msg.sender ?? msg.userId
       if (String(msgSender) !== String(currentUserId)) {
-        chatApi.markAsRead(activeId)
+        chatApi.markAsRead(activeId).catch(() => {})
       }
     })
 
     const unsubTyping = subscribe(`/topic/connection.${activeId}.typing`, (event) => {
+      if (!event) return
       const eventSender = event.userId ?? event.senderId ?? event.sender ?? event.id
       const isTypingState = event.typing ?? event.isTyping
 
@@ -103,23 +106,23 @@ export default function ChatPage() {
     })
 
     const unsubRead = subscribe(`/topic/connection.${activeId}.read`, () => {
-      setMessages((prev) =>
-        prev.map((m) => {
+      setMessages((prev) => {
+        const currentList = Array.isArray(prev) ? prev : []
+        return currentList.map((m) => {
           const msgSender = m.senderId ?? m.sender ?? m.userId
           return String(msgSender) === String(currentUserId) ? { ...m, status: 'READ' } : m
         })
-      )
+      })
     })
 
     return () => {
-      unsubMessages()
-      unsubTyping()
-      unsubRead()
-      unsubPresence()
+      if (unsubMessages) unsubMessages()
+      if (unsubTyping) unsubTyping()
+      if (unsubRead) unsubRead()
+      if (unsubPresence) unsubPresence()
     }
   }, [activeId, connected, subscribe, publish, currentUserId, conversations])
 
-  // ✅ Disconnect hone par offline publish karo
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (currentUserId) {
@@ -166,7 +169,7 @@ export default function ChatPage() {
   )
 
   const activeConversation = useMemo(
-    () => conversations.find((c) => String(c.id) === String(activeId)),
+    () => (Array.isArray(conversations) ? conversations.find((c) => String(c?.id) === String(activeId)) : null),
     [conversations, activeId]
   )
 
@@ -189,6 +192,8 @@ export default function ChatPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
   }
 
+  const safeConversations = Array.isArray(conversations) ? conversations : []
+
   return (
     <DashboardLayout>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-140px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-160px)] flex overflow-hidden font-sans">
@@ -206,7 +211,7 @@ export default function ChatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {conversations.length === 0 && (
+            {safeConversations.length === 0 && (
               <div className="text-center py-12 px-4 space-y-2">
                 <div className="w-12 h-12 rounded-full bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-xl mx-auto">
                   💬
@@ -217,7 +222,8 @@ export default function ChatPage() {
               </div>
             )}
 
-            {conversations.map((c) => {
+            {safeConversations.map((c) => {
+              if (!c) return null
               const isSelected = String(activeId) === String(c.id)
               const otherUserId = c.otherUserId || c.userId || c.id
               const online = isUserOnline(otherUserId)
@@ -258,7 +264,7 @@ export default function ChatPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
                       <p className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
-                        {c.otherUserName}
+                        {c.otherUserName || 'User'}
                       </p>
                     </div>
                     <p className={`text-xs truncate font-medium ${isSelected ? 'text-purple-100' : 'text-gray-400'}`}>
@@ -298,21 +304,21 @@ export default function ChatPage() {
 
                   <div className="relative shrink-0">
                     <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4B2ECF] to-orange-400 flex items-center justify-center text-white text-sm font-bold shadow-sm">
-                      {activeConversation.otherUserProfilePicture ? (
+                      {activeConversation?.otherUserProfilePicture ? (
                         <img src={activeConversation.otherUserProfilePicture} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        activeConversation.otherUserName?.[0]?.toUpperCase()
+                        activeConversation?.otherUserName?.[0]?.toUpperCase() || 'U'
                       )}
                     </div>
                     <span
                       className={`absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-white ${
-                        isUserOnline(activeConversation.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
+                        isUserOnline(activeConversation?.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
                       }`}
                     />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-gray-900 text-sm truncate">{activeConversation.otherUserName}</h3>
+                    <h3 className="font-bold text-gray-900 text-sm truncate">{activeConversation?.otherUserName || 'Chat'}</h3>
                     {otherTyping ? (
                       <p className="text-xs text-[#4B2ECF] animate-pulse font-semibold flex items-center gap-1">
                         <span>typing</span>
@@ -324,9 +330,9 @@ export default function ChatPage() {
                       </p>
                     ) : (
                       <p className="text-[11px] font-medium flex items-center gap-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isUserOnline(activeConversation.otherUserId) ? 'bg-green-500' : 'bg-gray-400'}`} />
-                        <span className={isUserOnline(activeConversation.otherUserId) ? 'text-green-600 font-semibold' : 'text-gray-400'}>
-                          {isUserOnline(activeConversation.otherUserId) ? 'Online' : 'Offline'}
+                        <span className={`w-1.5 h-1.5 rounded-full ${isUserOnline(activeConversation?.otherUserId) ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        <span className={isUserOnline(activeConversation?.otherUserId) ? 'text-green-600 font-semibold' : 'text-gray-400'}>
+                          {isUserOnline(activeConversation?.otherUserId) ? 'Online' : 'Offline'}
                         </span>
                       </p>
                     )}
@@ -335,7 +341,8 @@ export default function ChatPage() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
-                {messages.map((m, idx) => {
+                {(Array.isArray(messages) ? messages : []).map((m, idx) => {
+                  if (!m) return null
                   const msgSender = m.senderId ?? m.sender ?? m.userId
                   const isMine = String(msgSender) === String(currentUserId)
                   const isRead = m.status === 'READ'
