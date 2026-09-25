@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.jsx'
 
 function scrollToId(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
@@ -8,6 +9,7 @@ function scrollToId(id) {
 export default function Navbar() {
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
+  const { user, loading, isAuthenticated } = useAuth()
 
   const handleNavClick = (action) => {
     setIsOpen(false)
@@ -18,7 +20,13 @@ export default function Navbar() {
     <header className="h-[76px] bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-[6%] sticky top-0 z-50 font-sans shadow-xs">
       {/* Brand Logo with Graduation Cap */}
       <div 
-        onClick={() => scrollToId('home')} 
+        onClick={() => {
+          if (window.location.pathname === '/') {
+            scrollToId('home')
+          } else {
+            navigate('/')
+          }
+        }} 
         className="flex items-center gap-2.5 cursor-pointer"
       >
         <div className="w-9 h-9 relative flex items-center justify-center">
@@ -46,31 +54,45 @@ export default function Navbar() {
 
       {/* Desktop Nav Links */}
       <nav className="hidden md:flex items-center gap-7 text-sm font-semibold text-gray-600">
-        <button onClick={() => scrollToId('home')} className="hover:text-[#4B2ECF] transition cursor-pointer">Home</button>
-        <button onClick={() => scrollToId('skills')} className="hover:text-[#4B2ECF] transition cursor-pointer">Browse Skills</button>
+        <button onClick={() => navigate('/')} className="hover:text-[#4B2ECF] transition cursor-pointer">Home</button>
         <button onClick={() => navigate('/dashboard/search')} className="hover:text-[#4B2ECF] transition cursor-pointer">Find People</button>
-        <button onClick={() => scrollToId('how')} className="hover:text-[#4B2ECF] transition cursor-pointer">How It Works</button>
+        {isAuthenticated && (
+          <button onClick={() => navigate('/dashboard')} className="hover:text-[#4B2ECF] transition cursor-pointer">Dashboard</button>
+        )}
       </nav>
 
       {/* Action Buttons & Mobile Hamburger Toggle */}
       <div className="flex items-center gap-3">
         {/* Desktop Buttons */}
         <div className="hidden sm:flex items-center gap-3">
-          <button 
-            onClick={() => navigate('/login')} 
-            className="px-5 py-2.5 rounded-xl text-sm font-bold text-[#4B2ECF] border border-[#4B2ECF]/30 hover:bg-[#4B2ECF]/5 transition cursor-pointer"
-          >
-            Login
-          </button>
-          <button 
-            onClick={() => navigate('/register')} 
-            className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] shadow-md shadow-[#4B2ECF]/20 transition cursor-pointer"
-          >
-            Sign Up
-          </button>
+          {loading ? (
+            <div className="w-6 h-6 border-2 border-purple-200 border-t-[#4B2ECF] rounded-full animate-spin" />
+          ) : isAuthenticated ? (
+            <button 
+              onClick={() => navigate('/dashboard')} 
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] shadow-md shadow-[#4B2ECF]/20 transition cursor-pointer"
+            >
+              Go to Dashboard
+            </button>
+          ) : (
+            <>
+              <button 
+                onClick={() => navigate('/login')} 
+                className="px-5 py-2.5 rounded-xl text-sm font-bold text-[#4B2ECF] border border-[#4B2ECF]/30 hover:bg-[#4B2ECF]/5 transition cursor-pointer"
+              >
+                Login
+              </button>
+              <button 
+                onClick={() => navigate('/register')} 
+                className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] shadow-md shadow-[#4B2ECF]/20 transition cursor-pointer"
+              >
+                Sign Up
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Mobile Menu Icon (Show on Mobile only) */}
+        {/* Mobile Menu Icon */}
         <button 
           onClick={() => setIsOpen(!isOpen)} 
           className="md:hidden p-2 text-gray-700 hover:text-[#4B2ECF] focus:outline-none"
@@ -88,16 +110,10 @@ export default function Navbar() {
       {isOpen && (
         <div className="absolute top-[76px] left-0 right-0 bg-white border-b border-gray-200 shadow-lg p-5 md:hidden flex flex-col gap-4">
           <button 
-            onClick={() => handleNavClick(() => scrollToId('home'))} 
+            onClick={() => handleNavClick(() => navigate('/'))} 
             className="text-left font-semibold text-gray-700 hover:text-[#4B2ECF] py-1"
           >
             Home
-          </button>
-          <button 
-            onClick={() => handleNavClick(() => scrollToId('skills'))} 
-            className="text-left font-semibold text-gray-700 hover:text-[#4B2ECF] py-1"
-          >
-            Browse Skills
           </button>
           <button 
             onClick={() => handleNavClick(() => navigate('/dashboard/search'))} 
@@ -105,27 +121,44 @@ export default function Navbar() {
           >
             Find People
           </button>
-          <button 
-            onClick={() => handleNavClick(() => scrollToId('how'))} 
-            className="text-left font-semibold text-gray-700 hover:text-[#4B2ECF] py-1"
-          >
-            How It Works
-          </button>
+          {isAuthenticated && (
+            <button 
+              onClick={() => handleNavClick(() => navigate('/dashboard'))} 
+              className="text-left font-semibold text-gray-700 hover:text-[#4B2ECF] py-1"
+            >
+              Dashboard
+            </button>
+          )}
 
           {/* Mobile Auth Buttons */}
-          <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 sm:hidden">
-            <button 
-              onClick={() => handleNavClick(() => navigate('/login'))} 
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-[#4B2ECF] border border-[#4B2ECF]/30 hover:bg-[#4B2ECF]/5 text-center"
-            >
-              Login
-            </button>
-            <button 
-              onClick={() => handleNavClick(() => navigate('/register'))} 
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] shadow-md shadow-[#4B2ECF]/20 text-center"
-            >
-              Sign Up
-            </button>
+          <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
+            {loading ? (
+              <div className="flex justify-center py-2">
+                <div className="w-6 h-6 border-2 border-purple-200 border-t-[#4B2ECF] rounded-full animate-spin" />
+              </div>
+            ) : isAuthenticated ? (
+              <button 
+                onClick={() => handleNavClick(() => navigate('/dashboard'))} 
+                className="w-full py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] text-center"
+              >
+                Go to Dashboard
+              </button>
+            ) : (
+              <>
+                <button 
+                  onClick={() => handleNavClick(() => navigate('/login'))} 
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-[#4B2ECF] border border-[#4B2ECF]/30 hover:bg-[#4B2ECF]/5 text-center"
+                >
+                  Login
+                </button>
+                <button 
+                  onClick={() => handleNavClick(() => navigate('/register'))} 
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-white bg-[#4B2ECF] hover:bg-[#3b23ab] text-center"
+                >
+                  Sign Up
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
