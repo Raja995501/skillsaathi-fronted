@@ -12,7 +12,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   const loadCurrentUser = useCallback(async () => {
-    if (!tokenStorage.getAccessToken()) {
+    const token = tokenStorage.getAccessToken()
+    if (!token) {
       setLoading(false)
       return null
     }
@@ -34,6 +35,10 @@ export function AuthProvider({ children }) {
       if (error.response?.status === 401 || error.response?.status === 403) {
         tokenStorage.clear()
         setUser(null)
+      } else {
+        // 🛡️️ SAFETY NET: Agar network glitch ya slow response ki wajah se profile API fail hui,
+        // par localStorage mein valid token maujood hai, toh user ko logout mat karo!
+        setUser((prev) => prev || { tokenPresent: true })
       }
       return null
     } finally {
@@ -45,7 +50,7 @@ export function AuthProvider({ children }) {
     loadCurrentUser()
   }, [loadCurrentUser])
 
-  // ✅ CROSS-TAB SYNC
+  // ✅ CROSS-TAB SYNC: Agar doosre tab mein login/logout ho
   useEffect(() => {
     const handleStorageChange = (event) => {
       if (event.key === 'ss_access_token') {
@@ -72,7 +77,7 @@ export function AuthProvider({ children }) {
     const { data } = await authApi.login({ email, password })
     const loginData = data.data || data
     
-    // Fallback extraction for different backend key naming conventions
+    // Robust token extraction for different backend naming conventions
     const accessToken = loginData.accessToken || loginData.token || loginData.jwt
     const refreshToken = loginData.refreshToken || loginData.refresh_token
     const userInfo = loginData.user || loginData
