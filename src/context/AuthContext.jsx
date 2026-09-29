@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     loadCurrentUser()
   }, [loadCurrentUser])
 
-  // ✅ CROSS-TAB SYNC: Agar user doosre tab mein login/logout kare, toh yeh tab bhi auto-sync ho jaye
+  // ✅ CROSS-TAB SYNC
   useEffect(() => {
     const handleStorageChange = (event) => {
       if (event.key === 'ss_access_token') {
@@ -71,7 +71,11 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const { data } = await authApi.login({ email, password })
     const loginData = data.data || data
-    const { accessToken, refreshToken, ...userInfo } = loginData
+    
+    // Fallback extraction for different backend key naming conventions
+    const accessToken = loginData.accessToken || loginData.token || loginData.jwt
+    const refreshToken = loginData.refreshToken || loginData.refresh_token
+    const userInfo = loginData.user || loginData
 
     tokenStorage.setTokens(accessToken, refreshToken)
     setUser(userInfo)
@@ -88,7 +92,10 @@ export function AuthProvider({ children }) {
   const googleLogin = async (googleToken) => {
     const { data } = await authApi.googleLogin({ token: googleToken })
     const loginData = data.data || data
-    const { accessToken, refreshToken, ...userInfo } = loginData
+
+    const accessToken = loginData.accessToken || loginData.token || loginData.jwt
+    const refreshToken = loginData.refreshToken || loginData.refresh_token
+    const userInfo = loginData.user || loginData
 
     tokenStorage.setTokens(accessToken, refreshToken)
     setUser(userInfo)
