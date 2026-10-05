@@ -153,7 +153,7 @@ export default function ChatPage() {
     if (!draft.trim() || !activeId) return
     const messageContent = draft.trim()
     setDraft('')
-    publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId })
+    publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId, type: 'TEXT' })
     publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
   }
 
@@ -172,7 +172,7 @@ export default function ChatPage() {
         connectionId: activeId,
         content: file.name,
         fileUrl: fileUrl,
-        type: type,
+        type: type || (file.type.startsWith('video') ? 'VIDEO' : 'IMAGE'),
         senderId: currentUserId
       })
     } catch (err) {
