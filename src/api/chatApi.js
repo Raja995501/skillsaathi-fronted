@@ -5,7 +5,6 @@ export const chatApi = {
     apiClient.get(`/connections/${connectionId}/messages`, { params: { page, size } }),
   markAsRead: (connectionId) => apiClient.post(`/connections/${connectionId}/messages/read`),
   
-  // === ADDED FOR MEDIA UPLOAD ===
   uploadMedia: (connectionId, file) => {
     const formData = new FormData()
     formData.append('file', file)

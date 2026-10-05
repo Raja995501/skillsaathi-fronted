@@ -61,7 +61,7 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [activeId])
 
-  // === FIXED WEBSOCKET SUBSCRIPTIONS FOR REALTIME SYNC ===
+  // === FIXED WEBSOCKET SUBSCRIPTIONS (Loop Fixed) ===
   useEffect(() => {
     if (!connected) return
 
@@ -77,7 +77,7 @@ export default function ChatPage() {
       }
     })
 
-    if (currentUserId && conversations?.length > 0) {
+    if (currentUserId) {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
 
@@ -90,7 +90,6 @@ export default function ChatPage() {
       if (!msg) return
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
-        // Check if message already exists by ID
         if (msg.id && currentList.some((m) => m.id === msg.id)) return currentList
         return [...currentList, msg]
       })
@@ -111,10 +110,8 @@ export default function ChatPage() {
       }
     })
 
-    // Fixed Read Receipt Subscription for Double/Blue Ticks
     const unsubRead = subscribe(`/topic/connection.${activeId}.read`, (event) => {
       const readByUserId = event?.readByUserId ?? event?.userId
-      // Agar samne wale ne read kiya hai, toh mere messages ko READ mark kar do
       if (readByUserId && String(readByUserId) !== String(currentUserId)) {
         setMessages((prev) => {
           const currentList = Array.isArray(prev) ? prev : []
@@ -132,7 +129,7 @@ export default function ChatPage() {
       if (unsubRead) unsubRead()
       if (unsubPresence) unsubPresence()
     }
-  }, [activeId, connected, subscribe, publish, currentUserId, conversations])
+  }, [activeId, connected, subscribe, publish, currentUserId])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
