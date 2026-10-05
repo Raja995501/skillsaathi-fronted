@@ -61,6 +61,7 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [activeId])
 
+  // === FIXED WEBSOCKET SUBSCRIPTIONS FOR REALTIME SYNC ===
   useEffect(() => {
     if (!connected) return
 
@@ -84,13 +85,16 @@ export default function ChatPage() {
       return () => { if (unsubPresence) unsubPresence() }
     }
 
+    // Subscribe to active connection messages
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
       if (!msg) return
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
+        // Check if message already exists by ID
         if (msg.id && currentList.some((m) => m.id === msg.id)) return currentList
         return [...currentList, msg]
       })
+
       const msgSender = msg.senderId ?? msg.sender ?? msg.userId
       if (String(msgSender) !== String(currentUserId)) {
         chatApi.markAsRead(activeId).catch(() => {})
@@ -107,14 +111,19 @@ export default function ChatPage() {
       }
     })
 
-    const unsubRead = subscribe(`/topic/connection.${activeId}.read`, () => {
-      setMessages((prev) => {
-        const currentList = Array.isArray(prev) ? prev : []
-        return currentList.map((m) => {
-          const msgSender = m.senderId ?? m.sender ?? m.userId
-          return String(msgSender) === String(currentUserId) ? { ...m, status: 'READ' } : m
+    // Fixed Read Receipt Subscription for Double/Blue Ticks
+    const unsubRead = subscribe(`/topic/connection.${activeId}.read`, (event) => {
+      const readByUserId = event?.readByUserId ?? event?.userId
+      // Agar samne wale ne read kiya hai, toh mere messages ko READ mark kar do
+      if (readByUserId && String(readByUserId) !== String(currentUserId)) {
+        setMessages((prev) => {
+          const currentList = Array.isArray(prev) ? prev : []
+          return currentList.map((m) => {
+            const msgSender = m.senderId ?? m.sender ?? m.userId
+            return String(msgSender) === String(currentUserId) ? { ...m, status: 'READ' } : m
+          })
         })
-      })
+      }
     })
 
     return () => {
@@ -157,7 +166,6 @@ export default function ChatPage() {
     publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
   }
 
-  // === MEDIA FILE SELECT HANDLER ===
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
@@ -385,7 +393,6 @@ export default function ChatPage() {
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
                         }`}
                       >
-                        {/* === MEDIA RENDERING SUPPORT === */}
                         {m.type === 'IMAGE' && m.fileUrl ? (
                           <div className="mb-1">
                             <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover cursor-pointer" />
@@ -432,7 +439,6 @@ export default function ChatPage() {
               </div>
 
               <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
-                {/* Hidden File Input */}
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -441,7 +447,6 @@ export default function ChatPage() {
                   className="hidden"
                 />
 
-                {/* Attachment Button */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
