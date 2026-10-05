@@ -17,9 +17,11 @@ export default function ChatPage() {
   const [draft, setDraft] = useState('')
   const [otherTyping, setOtherTyping] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState({})
+  const [isUploading, setIsUploading] = useState(false)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
 
@@ -153,6 +155,33 @@ export default function ChatPage() {
     setDraft('')
     publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId })
     publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
+  }
+
+  // === MEDIA FILE SELECT HANDLER ===
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0]
+    if (!file || !activeId) return
+
+    try {
+      setIsUploading(true)
+      const res = await chatApi.uploadMedia(activeId, file)
+      const responseData = res.data?.data || res.data
+      const { fileUrl, type } = responseData
+
+      publish('/app/chat.send', {
+        connectionId: activeId,
+        content: file.name,
+        fileUrl: fileUrl,
+        type: type,
+        senderId: currentUserId
+      })
+    } catch (err) {
+      console.error("Media upload failed:", err)
+      alert("File upload failed. Please try again.")
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const handleTyping = useCallback(
@@ -356,7 +385,23 @@ export default function ChatPage() {
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
                         }`}
                       >
-                        <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
+                        {/* === MEDIA RENDERING SUPPORT === */}
+                        {m.type === 'IMAGE' && m.fileUrl ? (
+                          <div className="mb-1">
+                            <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover cursor-pointer" />
+                          </div>
+                        ) : m.type === 'VIDEO' && m.fileUrl ? (
+                          <div className="mb-1">
+                            <video controls className="rounded-lg max-w-full max-h-60">
+                              <source src={m.fileUrl} type="video/mp4" />
+                              Your browser does not support the video tag.
+                            </video>
+                          </div>
+                        ) : null}
+
+                        {m.content && m.content !== m.fileUrl && (
+                          <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
+                        )}
 
                         <div
                           className={`flex items-center gap-1 text-[10px] mt-1 ${
@@ -387,16 +432,36 @@ export default function ChatPage() {
               </div>
 
               <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
+                {/* Hidden File Input */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,video/*"
+                  className="hidden"
+                />
+
+                {/* Attachment Button */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!connected || isUploading}
+                  className="p-2.5 rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Upload Image or Video"
+                >
+                  {isUploading ? '⌛' : '📎'}
+                </button>
+
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
-                  placeholder={connected ? 'Type a message...' : 'Connecting...'}
-                  disabled={!connected}
+                  placeholder={connected ? (isUploading ? 'Uploading media...' : 'Type a message...') : 'Connecting...'}
+                  disabled={!connected || isUploading}
                   className="flex-1 w-full min-w-0 px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
                 <button
                   type="submit"
-                  disabled={!connected || !draft.trim()}
+                  disabled={!connected || !draft.trim() || isUploading}
                   className="shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <span className="hidden lg:inline">Send</span>

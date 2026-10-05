@@ -1,5 +1,5 @@
 // src/services/pushService.js
-// Naya file — existing code ko touch nahi karta
+// Web Push subscription manager
 
 const BACKEND = 'https://skillsaathi-backend.onrender.com';
 
@@ -82,14 +82,34 @@ export async function subscribeToPush() {
     return null;
   }
 }
+
 export async function unsubscribeFromPush() {
   try {
+    if (!('serviceWorker' in navigator)) return;
+
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      await subscription.unsubscribe();
-      console.log('✅ Unsubscribed from push notifications');
+    if (!subscription) return;
+
+    const endpoint = subscription.endpoint;
+
+    // Save token BEFORE unsubscribing (token may be cleared later)
+    const token = localStorage.getItem('ss_access_token');
+
+    await subscription.unsubscribe();
+
+    // ✅ Also remove from backend DB
+    if (token) {
+      await fetch(
+        `${BACKEND}/api/v1/notifications/push/unsubscribe?endpoint=${encodeURIComponent(endpoint)}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
     }
+
+    console.log('✅ Unsubscribed from push notifications');
   } catch (err) {
     console.error('❌ Unsubscribe failed:', err);
   }

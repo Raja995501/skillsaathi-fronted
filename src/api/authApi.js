@@ -6,7 +6,7 @@ export const authApi = {
   login: (payload) => apiClient.post('/auth/login', payload),
   
   // ✅ Google Login Endpoint
-  googleLogin: (payload) => apiClient.post('/auth/google', payload),
+   googleLogin: (payload) => apiClient.post('/auth/google', payload),
   
   refresh: (refreshToken) => apiClient.post('/auth/refresh', { refreshToken }),
   logout: (refreshToken) => apiClient.post('/auth/logout', { refreshToken }),
