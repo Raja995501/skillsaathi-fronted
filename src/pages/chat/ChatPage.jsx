@@ -510,7 +510,6 @@ export default function ChatPage() {
                   ref={cameraInputRef}
                   onChange={handleFileSelect}
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                 />
                 <input
