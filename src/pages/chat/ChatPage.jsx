@@ -18,7 +18,6 @@ export default function ChatPage() {
   const [otherTyping, setOtherTyping] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState({})
   const [isUploading, setIsUploading] = useState(false)
-  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -26,14 +25,6 @@ export default function ChatPage() {
   const cameraInputRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
-
-  // Close attachment menu on outside click
-  useEffect(() => {
-    if (!showAttachmentMenu) return
-    const handleClick = () => setShowAttachmentMenu(false)
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  }, [showAttachmentMenu])
 
   useEffect(() => {
     let isMounted = true
@@ -71,7 +62,6 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [activeId])
 
-  // === PRESENCE (independent) ===
   useEffect(() => {
     if (!connected) return
 
@@ -93,7 +83,6 @@ export default function ChatPage() {
     return () => { if (unsubPresence) unsubPresence() }
   }, [connected, subscribe, publish, currentUserId])
 
-  // === MESSAGES / TYPING / READ (active connection only) ===
   useEffect(() => {
     if (!connected || !activeId) return
 
@@ -103,12 +92,10 @@ export default function ChatPage() {
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
 
-        // Real message already exists? Skip
         if (msg.id && currentList.some((m) => String(m.id) === String(msg.id))) {
           return currentList
         }
 
-        // Replace optimistic temp message
         const msgSender = msg.senderId ?? msg.sender ?? msg.userId
         if (String(msgSender) === String(currentUserId)) {
           const optIdx = currentList.findIndex(
@@ -183,7 +170,6 @@ export default function ChatPage() {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
 
-  // === SEND TEXT MESSAGE — Optimistic UI ===
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
@@ -217,7 +203,6 @@ export default function ChatPage() {
     })
   }
 
-  // === SEND MEDIA (Camera / Gallery) — Optimistic UI ===
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
@@ -510,8 +495,10 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
-                {/* Hidden inputs: Camera + Gallery */}
+              {/* === MESSAGE INPUT BAR === */}
+              <form onSubmit={handleSend} className="p-2 sm:p-3 bg-white border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 shrink-0 w-full">
+
+                {/* Hidden inputs */}
                 <input
                   type="file"
                   ref={cameraInputRef}
@@ -528,64 +515,55 @@ export default function ChatPage() {
                   className="hidden"
                 />
 
-                {/* Attachment button with dropdown */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowAttachmentMenu((prev) => !prev)
-                    }}
-                    disabled={!connected || isUploading}
-                    className="p-2.5 rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
-                    title="Upload Image or Video"
-                  >
-                    {isUploading ? '⌛' : '📎'}
-                  </button>
+                {/* Camera icon — direct camera */}
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  disabled={!connected || isUploading}
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Open Camera"
+                  aria-label="Open Camera"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                    <circle cx="12" cy="13" r="3"/>
+                  </svg>
+                </button>
 
-                  {showAttachmentMenu && !isUploading && (
-                    <div
-                      className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-lg border border-gray-100 p-1.5 flex flex-col gap-1 z-50 min-w-[160px]"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAttachmentMenu(false)
-                          cameraInputRef.current?.click()
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
-                      >
-                        📷 <span>Camera</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAttachmentMenu(false)
-                          fileInputRef.current?.click()
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
-                      >
-                        🖼️ <span>Gallery</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {/* Gallery icon — file picker */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!connected || isUploading}
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Attach file from gallery"
+                  aria-label="Attach file"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                </button>
 
+                {/* Text input — flexible width */}
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
-                  placeholder={connected ? (isUploading ? 'Uploading media...' : 'Type a message...') : 'Connecting...'}
+                  placeholder={connected ? (isUploading ? 'Uploading...' : 'Type a message...') : 'Connecting...'}
                   disabled={!connected || isUploading}
-                  className="flex-1 w-full min-w-0 px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
+                  className="flex-1 min-w-0 w-full px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
+
+                {/* Send button */}
                 <button
                   type="submit"
                   disabled={!connected || !draft.trim() || isUploading}
-                  className="shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  className="shrink-0 h-10 px-3 sm:px-4 lg:px-5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <span className="hidden lg:inline">Send</span>
-                  <span className="text-xs">➔</span>
+                  <span className="hidden sm:inline">Send</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m22 2-7 20-4-9-9-4Z"/>
+                    <path d="M22 2 11 13"/>
+                  </svg>
                 </button>
               </form>
             </>
