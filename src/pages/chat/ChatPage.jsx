@@ -61,7 +61,7 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [activeId])
 
-  // === FIXED WEBSOCKET SUBSCRIPTIONS (Loop Fixed) ===
+  // === PRESENCE (independent) ===
   useEffect(() => {
     if (!connected) return
 
@@ -69,10 +69,9 @@ export default function ChatPage() {
       if (!event) return
       const targetUser = event.userId
       if (targetUser != null) {
-        const isOnline = Boolean(event.online)
         setOnlineUsers((prev) => ({
           ...prev,
-          [String(targetUser)]: isOnline,
+          [String(targetUser)]: Boolean(event.online),
         }))
       }
     })
@@ -81,16 +80,37 @@ export default function ChatPage() {
       publish('/app/user.presence', { userId: currentUserId, online: true })
     }
 
-    if (!activeId) {
-      return () => { if (unsubPresence) unsubPresence() }
-    }
+    return () => { if (unsubPresence) unsubPresence() }
+  }, [connected, subscribe, publish, currentUserId])
 
-    // Subscribe to active connection messages
+  // === MESSAGES / TYPING / READ (active connection only) ===
+  useEffect(() => {
+    if (!connected || !activeId) return
+
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
       if (!msg) return
+
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
-        if (msg.id && currentList.some((m) => m.id === msg.id)) return currentList
+
+        // Real message already exists? Skip
+        if (msg.id && currentList.some((m) => String(m.id) === String(msg.id))) {
+          return currentList
+        }
+
+        // Replace optimistic temp message
+        const msgSender = msg.senderId ?? msg.sender ?? msg.userId
+        if (String(msgSender) === String(currentUserId)) {
+          const optIdx = currentList.findIndex(
+            (m) => typeof m.id === 'string' && m.id.startsWith('temp-') && m.type === msg.type
+          )
+          if (optIdx !== -1) {
+            const updated = [...currentList]
+            updated[optIdx] = msg
+            return updated
+          }
+        }
+
         return [...currentList, msg]
       })
 
@@ -127,9 +147,8 @@ export default function ChatPage() {
       if (unsubMessages) unsubMessages()
       if (unsubTyping) unsubTyping()
       if (unsubRead) unsubRead()
-      if (unsubPresence) unsubPresence()
     }
-  }, [activeId, connected, subscribe, publish, currentUserId])
+  }, [activeId, connected, subscribe, currentUserId])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -154,31 +173,73 @@ export default function ChatPage() {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
 
+  // === SEND TEXT MESSAGE — Optimistic UI ===
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
+
     const messageContent = draft.trim()
     setDraft('')
-    publish('/app/chat.send', { connectionId: activeId, content: messageContent, senderId: currentUserId, type: 'TEXT' })
-    publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
+
+    // Optimistic add — turant dikhao
+    const optimisticMsg = {
+      id: `temp-${Date.now()}`,
+      connectionId: activeId,
+      senderId: currentUserId,
+      content: messageContent,
+      type: 'TEXT',
+      fileUrl: null,
+      status: 'SENT',
+      createdAt: new Date().toISOString(),
+      _optimistic: true,
+    }
+    setMessages((prev) => [...prev, optimisticMsg])
+
+    publish('/app/chat.send', {
+      connectionId: activeId,
+      content: messageContent,
+      senderId: currentUserId,
+      type: 'TEXT',
+    })
+    publish('/app/chat.typing', {
+      connectionId: activeId,
+      typing: false,
+      userId: currentUserId,
+    })
   }
 
+  // === SEND MEDIA — Optimistic UI ===
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
 
     try {
       setIsUploading(true)
-      const res = await chatApi.uploadMedia(activeId, file)
+      const res = await chatApi.uploadMedia(file)
       const responseData = res.data?.data || res.data
       const { fileUrl, type } = responseData
+
+      const mediaType = type || (file.type.startsWith('video') ? 'VIDEO' : 'IMAGE')
+
+      const optimisticMsg = {
+        id: `temp-${Date.now()}`,
+        connectionId: activeId,
+        senderId: currentUserId,
+        content: file.name,
+        fileUrl: fileUrl,
+        type: mediaType,
+        status: 'SENT',
+        createdAt: new Date().toISOString(),
+        _optimistic: true,
+      }
+      setMessages((prev) => [...prev, optimisticMsg])
 
       publish('/app/chat.send', {
         connectionId: activeId,
         content: file.name,
         fileUrl: fileUrl,
-        type: type || (file.type.startsWith('video') ? 'VIDEO' : 'IMAGE'),
-        senderId: currentUserId
+        type: mediaType,
+        senderId: currentUserId,
       })
     } catch (err) {
       console.error("Media upload failed:", err)
@@ -388,7 +449,7 @@ export default function ChatPage() {
                           isMine
                             ? 'bg-[#4B2ECF] text-white rounded-br-xs'
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
-                        }`}
+                        } ${m._optimistic ? 'opacity-70' : ''}`}
                       >
                         {m.type === 'IMAGE' && m.fileUrl ? (
                           <div className="mb-1">
@@ -403,8 +464,12 @@ export default function ChatPage() {
                           </div>
                         ) : null}
 
-                        {m.content && m.content !== m.fileUrl && (
+                        {m.type === 'TEXT' && m.content && (
                           <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
+                        )}
+
+                        {m.type !== 'TEXT' && m.content && m.content !== m.fileUrl && (
+                          <p className="text-[11px] italic opacity-75 mb-1">{m.content}</p>
                         )}
 
                         <div
