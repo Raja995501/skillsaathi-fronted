@@ -6,6 +6,12 @@ import { chatApi } from '../../api/chatApi'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useWebSocket } from '../../context/WebSocketContext.jsx'
 
+// Detect mobile device
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+}
+
 export default function ChatPage() {
   const { user } = useAuth()
   const { connected, subscribe, publish } = useWebSocket()
@@ -25,6 +31,7 @@ export default function ChatPage() {
   const cameraInputRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
+  const isMobile = useMemo(() => isMobileDevice(), [])
 
   useEffect(() => {
     let isMounted = true
@@ -495,7 +502,6 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* === MESSAGE INPUT BAR === */}
               <form onSubmit={handleSend} className="p-2 sm:p-3 bg-white border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 shrink-0 w-full">
 
                 {/* Hidden inputs */}
@@ -515,22 +521,24 @@ export default function ChatPage() {
                   className="hidden"
                 />
 
-                {/* Camera icon — direct camera */}
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  disabled={!connected || isUploading}
-                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Open Camera"
-                  aria-label="Open Camera"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                    <circle cx="12" cy="13" r="3"/>
-                  </svg>
-                </button>
+                {/* Camera icon — sirf mobile pe */}
+                {isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={!connected || isUploading}
+                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
+                    title="Open Camera"
+                    aria-label="Open Camera"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                      <circle cx="12" cy="13" r="3"/>
+                    </svg>
+                  </button>
+                )}
 
-                {/* Gallery icon — file picker */}
+                {/* Gallery icon — sab platforms pe */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -544,7 +552,7 @@ export default function ChatPage() {
                   </svg>
                 </button>
 
-                {/* Text input — flexible width */}
+                {/* Text input */}
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
