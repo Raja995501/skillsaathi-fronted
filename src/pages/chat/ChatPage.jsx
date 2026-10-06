@@ -509,7 +509,7 @@ export default function ChatPage() {
                   type="file"
                   ref={cameraInputRef}
                   onChange={handleFileSelect}
-                  accept="image/*,video/*"
+                  accept="image/*"
                   capture="environment"
                   className="hidden"
                 />
