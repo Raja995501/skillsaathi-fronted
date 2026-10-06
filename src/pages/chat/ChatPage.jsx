@@ -18,12 +18,22 @@ export default function ChatPage() {
   const [otherTyping, setOtherTyping] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState({})
   const [isUploading, setIsUploading] = useState(false)
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
+
+  // Close attachment menu on outside click
+  useEffect(() => {
+    if (!showAttachmentMenu) return
+    const handleClick = () => setShowAttachmentMenu(false)
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [showAttachmentMenu])
 
   useEffect(() => {
     let isMounted = true
@@ -181,7 +191,6 @@ export default function ChatPage() {
     const messageContent = draft.trim()
     setDraft('')
 
-    // Optimistic add — turant dikhao
     const optimisticMsg = {
       id: `temp-${Date.now()}`,
       connectionId: activeId,
@@ -208,7 +217,7 @@ export default function ChatPage() {
     })
   }
 
-  // === SEND MEDIA — Optimistic UI ===
+  // === SEND MEDIA (Camera / Gallery) — Optimistic UI ===
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
@@ -247,6 +256,7 @@ export default function ChatPage() {
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
     }
   }
 
@@ -501,6 +511,15 @@ export default function ChatPage() {
               </div>
 
               <form onSubmit={handleSend} className="p-2.5 sm:p-3.5 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 w-full">
+                {/* Hidden inputs: Camera + Gallery */}
+                <input
+                  type="file"
+                  ref={cameraInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,video/*"
+                  capture="environment"
+                  className="hidden"
+                />
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -509,15 +528,49 @@ export default function ChatPage() {
                   className="hidden"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!connected || isUploading}
-                  className="p-2.5 rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Upload Image or Video"
-                >
-                  {isUploading ? '⌛' : '📎'}
-                </button>
+                {/* Attachment button with dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowAttachmentMenu((prev) => !prev)
+                    }}
+                    disabled={!connected || isUploading}
+                    className="p-2.5 rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
+                    title="Upload Image or Video"
+                  >
+                    {isUploading ? '⌛' : '📎'}
+                  </button>
+
+                  {showAttachmentMenu && !isUploading && (
+                    <div
+                      className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-lg border border-gray-100 p-1.5 flex flex-col gap-1 z-50 min-w-[160px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAttachmentMenu(false)
+                          cameraInputRef.current?.click()
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        📷 <span>Camera</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAttachmentMenu(false)
+                          fileInputRef.current?.click()
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        🖼️ <span>Gallery</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <input
                   value={draft}
