@@ -5,6 +5,8 @@ import { connectionApi } from '../../api/connectionApi'
 import { chatApi } from '../../api/chatApi'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useWebSocket } from '../../context/WebSocketContext.jsx'
+import MediaPreviewModal from '../../components/chat/MediaPreviewModal.jsx'
+import MessageContextMenu from '../../components/chat/MessageContextMenu.jsx'
 
 // Detect mobile device
 const isMobileDevice = () => {
@@ -24,15 +26,19 @@ export default function ChatPage() {
   const [otherTyping, setOtherTyping] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState({})
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingFile, setPendingFile] = useState(null)
+  const [contextMenu, setContextMenu] = useState(null)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
+  const longPressTimerRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
   const isMobile = useMemo(() => isMobileDevice(), [])
 
+  // === Load conversations ===
   useEffect(() => {
     let isMounted = true
     connectionApi.list('ACCEPTED').then((res) => {
@@ -47,12 +53,14 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [])
 
+  // === Update URL with activeId ===
   useEffect(() => {
     if (activeId) {
       setSearchParams({ connectionId: activeId }, { replace: true })
     }
   }, [activeId, setSearchParams])
 
+  // === Load chat history ===
   useEffect(() => {
     if (!activeId) return
     let isMounted = true
@@ -69,6 +77,7 @@ export default function ChatPage() {
     return () => { isMounted = false }
   }, [activeId])
 
+  // === Presence subscription ===
   useEffect(() => {
     if (!connected) return
 
@@ -90,6 +99,7 @@ export default function ChatPage() {
     return () => { if (unsubPresence) unsubPresence() }
   }, [connected, subscribe, publish, currentUserId])
 
+  // === Messages / Typing / Read subscriptions ===
   useEffect(() => {
     if (!connected || !activeId) return
 
@@ -154,6 +164,7 @@ export default function ChatPage() {
     }
   }, [activeId, connected, subscribe, currentUserId])
 
+  // === Beforeunload presence ===
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (currentUserId) {
@@ -169,14 +180,108 @@ export default function ChatPage() {
     }
   }, [currentUserId, publish])
 
+  // === Auto-scroll to bottom ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // === Cleanup typing timeout ===
   useEffect(() => {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
 
+  // === Close context menu on scroll ===
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleScroll = () => setContextMenu(null)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
+  }, [contextMenu])
+
+  // === Context menu handlers ===
+  const openContextMenu = (message, x, y) => {
+    setContextMenu({ message, position: { x, y } })
+  }
+
+  const closeContextMenu = () => setContextMenu(null)
+
+  const handleContextMenu = (e, message) => {
+    e.preventDefault()
+    e.stopPropagation()
+    openContextMenu(message, e.clientX, e.clientY)
+  }
+
+  const handleTouchStart = (e, message) => {
+    const touch = e.touches[0]
+    const x = touch.clientX
+    const y = touch.clientY
+    longPressTimerRef.current = setTimeout(() => {
+      openContextMenu(message, x, y)
+    }, 500)
+  }
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleTouchMove = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  // === Context menu actions ===
+  const handleCopyMessage = async (content) => {
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch (err) {
+      console.error('Copy failed:', err)
+    }
+  }
+
+  const handleEditMessage = (message) => {
+    alert('Edit feature coming soon!')
+  }
+
+  const handleReplyMessage = (message) => {
+    alert('Reply feature coming soon!')
+  }
+
+  const handleDeleteMessage = (message) => {
+    alert('Delete feature coming soon!')
+  }
+
+  const handleViewMessage = (message) => {
+    if (message.fileUrl) {
+      window.open(message.fileUrl, '_blank')
+    }
+  }
+
+  const handleDownloadMessage = async (message) => {
+    if (!message.fileUrl) return
+    try {
+      const response = await fetch(message.fileUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const filename = message.content || (message.type === 'VIDEO' ? 'video.mp4' : 'image.jpg')
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download failed:', err)
+      alert('Download failed. Please try again.')
+    }
+  }
+
+  // === Send text message ===
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
@@ -210,23 +315,33 @@ export default function ChatPage() {
     })
   }
 
-  const handleFileSelect = async (e) => {
+  // === File select → preview ===
+  const handleFileSelect = (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
+    setPendingFile(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+  }
+
+  // === Preview send ===
+  const handlePreviewSend = async (caption) => {
+    if (!pendingFile || !activeId) return
 
     try {
       setIsUploading(true)
-      const res = await chatApi.uploadMedia(file)
+      const res = await chatApi.uploadMedia(pendingFile)
       const responseData = res.data?.data || res.data
       const { fileUrl, type } = responseData
 
-      const mediaType = type || (file.type.startsWith('video') ? 'VIDEO' : 'IMAGE')
+      const mediaType = type || (pendingFile.type.startsWith('video') ? 'VIDEO' : 'IMAGE')
+      const messageContent = caption || pendingFile.name
 
       const optimisticMsg = {
         id: `temp-${Date.now()}`,
         connectionId: activeId,
         senderId: currentUserId,
-        content: file.name,
+        content: messageContent,
         fileUrl: fileUrl,
         type: mediaType,
         status: 'SENT',
@@ -237,21 +352,24 @@ export default function ChatPage() {
 
       publish('/app/chat.send', {
         connectionId: activeId,
-        content: file.name,
+        content: messageContent,
         fileUrl: fileUrl,
         type: mediaType,
         senderId: currentUserId,
       })
+
+      setPendingFile(null)
     } catch (err) {
       console.error("Media upload failed:", err)
       alert("File upload failed. Please try again.")
     } finally {
       setIsUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      if (cameraInputRef.current) cameraInputRef.current.value = ''
     }
   }
 
+  const handlePreviewCancel = () => setPendingFile(null)
+
+  // === Typing handler ===
   const handleTyping = useCallback(
     (value) => {
       setDraft(value)
@@ -295,6 +413,7 @@ export default function ChatPage() {
     <DashboardLayout>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-140px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-160px)] flex overflow-hidden font-sans">
 
+        {/* Sidebar */}
         <div
           className={`w-full lg:w-56 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
             activeId ? 'hidden lg:flex' : 'flex'
@@ -374,6 +493,7 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* Chat area */}
         <div
           className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${
             !activeId ? 'hidden lg:flex' : 'flex'
@@ -388,6 +508,7 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
+              {/* Header */}
               <div className="px-3 sm:px-5 py-3 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                   <button
@@ -437,6 +558,7 @@ export default function ChatPage() {
                 </div>
               </div>
 
+              {/* Messages */}
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {(Array.isArray(messages) ? messages : []).map((m, idx) => {
                   if (!m) return null
@@ -447,7 +569,11 @@ export default function ChatPage() {
                   return (
                     <div key={m.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div
-                        className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative group ${
+                        onContextMenu={(e) => handleContextMenu(e, m)}
+                        onTouchStart={(e) => handleTouchStart(e, m)}
+                        onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchMove}
+                        className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative group cursor-pointer select-none ${
                           isMine
                             ? 'bg-[#4B2ECF] text-white rounded-br-xs'
                             : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
@@ -455,7 +581,7 @@ export default function ChatPage() {
                       >
                         {m.type === 'IMAGE' && m.fileUrl ? (
                           <div className="mb-1">
-                            <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover cursor-pointer" />
+                            <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover" />
                           </div>
                         ) : m.type === 'VIDEO' && m.fileUrl ? (
                           <div className="mb-1">
@@ -471,7 +597,7 @@ export default function ChatPage() {
                         )}
 
                         {m.type !== 'TEXT' && m.content && m.content !== m.fileUrl && (
-                          <p className="text-[11px] italic opacity-75 mb-1">{m.content}</p>
+                          <p className="text-[13px] font-medium leading-relaxed mb-1">{m.content}</p>
                         )}
 
                         <div
@@ -502,9 +628,8 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* Input form */}
               <form onSubmit={handleSend} className="p-2 sm:p-3 bg-white border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 shrink-0 w-full">
-
-                {/* Hidden inputs */}
                 <input
                   type="file"
                   ref={cameraInputRef}
@@ -520,7 +645,6 @@ export default function ChatPage() {
                   className="hidden"
                 />
 
-                {/* Camera icon — sirf mobile pe */}
                 {isMobile && (
                   <button
                     type="button"
@@ -537,7 +661,6 @@ export default function ChatPage() {
                   </button>
                 )}
 
-                {/* Gallery icon — sab platforms pe */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -551,7 +674,6 @@ export default function ChatPage() {
                   </svg>
                 </button>
 
-                {/* Text input */}
                 <input
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
@@ -560,7 +682,6 @@ export default function ChatPage() {
                   className="flex-1 min-w-0 w-full px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
 
-                {/* Send button */}
                 <button
                   type="submit"
                   disabled={!connected || !draft.trim() || isUploading}
@@ -577,6 +698,32 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {/* Preview modal */}
+      {pendingFile && (
+        <MediaPreviewModal
+          file={pendingFile}
+          onCancel={handlePreviewCancel}
+          onSend={handlePreviewSend}
+          isUploading={isUploading}
+        />
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <MessageContextMenu
+          message={contextMenu.message}
+          isMine={String(contextMenu.message.senderId ?? contextMenu.message.sender ?? contextMenu.message.userId) === String(currentUserId)}
+          position={contextMenu.position}
+          onClose={closeContextMenu}
+          onCopy={handleCopyMessage}
+          onEdit={handleEditMessage}
+          onReply={handleReplyMessage}
+          onDelete={handleDeleteMessage}
+          onView={handleViewMessage}
+          onDownload={handleDownloadMessage}
+        />
+      )}
     </DashboardLayout>
   )
 }

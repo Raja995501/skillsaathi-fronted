@@ -7,7 +7,6 @@ export const chatApi = {
   markAsRead: (connectionId) =>
     apiClient.post(`/connections/${connectionId}/messages/read`),
 
-  // ✅ FIXED: correct upload endpoint
   uploadMedia: (file) => {
     const formData = new FormData()
     formData.append('file', file)
