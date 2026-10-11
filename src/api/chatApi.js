@@ -14,4 +14,10 @@ export const chatApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+
+  // ✅ Delete — via REST (WebSocket bhi hai but REST zyada reliable)
+  deleteMessage: (connectionId, messageId, forEveryone = false) =>
+    apiClient.delete(`/connections/${connectionId}/messages/${messageId}`, {
+      params: { forEveryone },
+    }),
 }

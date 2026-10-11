@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { useWebSocket } from '../../context/WebSocketContext.jsx'
 import MediaPreviewModal from '../../components/chat/MediaPreviewModal.jsx'
 import MessageContextMenu from '../../components/chat/MessageContextMenu.jsx'
+import DeleteConfirmDialog from '../../components/chat/DeleteConfirmDialog.jsx'
 
 // Detect mobile device
 const isMobileDevice = () => {
@@ -28,6 +29,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
+  const [deleteDialog, setDeleteDialog] = useState(null)  // ✅ NEW
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -99,7 +101,7 @@ export default function ChatPage() {
     return () => { if (unsubPresence) unsubPresence() }
   }, [connected, subscribe, publish, currentUserId])
 
-  // === Messages / Typing / Read subscriptions ===
+  // === Messages / Typing / Read / Delete subscriptions ===
   useEffect(() => {
     if (!connected || !activeId) return
 
@@ -157,10 +159,35 @@ export default function ChatPage() {
       }
     })
 
+    // ✅ NEW: Delete event subscription
+    const unsubDelete = subscribe(`/topic/connection.${activeId}.delete`, (event) => {
+      if (!event) return
+      const deletedId = event.messageId
+      const forEveryone = Boolean(event.forEveryone)
+      const deletedByUserId = event.deletedByUserId
+
+      setMessages((prev) => {
+        const currentList = Array.isArray(prev) ? prev : []
+        if (forEveryone) {
+          return currentList.map((m) =>
+            String(m.id) === String(deletedId)
+              ? { ...m, deleted: true, deletedForEveryone: true, content: 'This message was deleted', fileUrl: null }
+              : m
+          )
+        } else {
+          if (String(deletedByUserId) === String(currentUserId)) {
+            return currentList.filter((m) => String(m.id) !== String(deletedId))
+          }
+          return currentList
+        }
+      })
+    })
+
     return () => {
       if (unsubMessages) unsubMessages()
       if (unsubTyping) unsubTyping()
       if (unsubRead) unsubRead()
+      if (unsubDelete) unsubDelete()
     }
   }, [activeId, connected, subscribe, currentUserId])
 
@@ -180,12 +207,12 @@ export default function ChatPage() {
     }
   }, [currentUserId, publish])
 
-  // === Auto-scroll to bottom ===
+  // === Auto-scroll ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // === Cleanup typing timeout ===
+  // === Cleanup typing ===
   useEffect(() => {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
@@ -251,8 +278,9 @@ export default function ChatPage() {
     alert('Reply feature coming soon!')
   }
 
+  // ✅ UPDATED: Open delete confirm dialog
   const handleDeleteMessage = (message) => {
-    alert('Delete feature coming soon!')
+    setDeleteDialog(message)
   }
 
   const handleViewMessage = (message) => {
@@ -281,7 +309,36 @@ export default function ChatPage() {
     }
   }
 
-  // === Send text message ===
+  // ✅ NEW: Actual delete
+  const confirmDelete = async (forEveryone) => {
+    if (!deleteDialog || !activeId) return
+    const msg = deleteDialog
+    setDeleteDialog(null)
+
+    try {
+      await chatApi.deleteMessage(activeId, msg.id, forEveryone)
+
+      setMessages((prev) => {
+        const currentList = Array.isArray(prev) ? prev : []
+        if (forEveryone) {
+          return currentList.map((m) =>
+            String(m.id) === String(msg.id)
+              ? { ...m, deleted: true, deletedForEveryone: true, content: 'This message was deleted', fileUrl: null }
+              : m
+          )
+        } else {
+          return currentList.filter((m) => String(m.id) !== String(msg.id))
+        }
+      })
+    } catch (err) {
+      console.error('Delete failed:', err)
+      alert('Delete failed. Please try again.')
+    }
+  }
+
+  const cancelDelete = () => setDeleteDialog(null)
+
+  // === Send text ===
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
@@ -369,7 +426,7 @@ export default function ChatPage() {
 
   const handlePreviewCancel = () => setPendingFile(null)
 
-  // === Typing handler ===
+  // === Typing ===
   const handleTyping = useCallback(
     (value) => {
       setDraft(value)
@@ -414,11 +471,7 @@ export default function ChatPage() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm h-[calc(100vh-140px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-160px)] flex overflow-hidden font-sans">
 
         {/* Sidebar */}
-        <div
-          className={`w-full lg:w-56 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${
-            activeId ? 'hidden lg:flex' : 'flex'
-          }`}
-        >
+        <div className={`w-full lg:w-56 border-r border-gray-100 flex-col shrink-0 bg-slate-50/40 ${activeId ? 'hidden lg:flex' : 'flex'}`}>
           <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0">
             <div>
               <h2 className="font-extrabold text-gray-900 text-lg tracking-tight">Messages</h2>
@@ -429,12 +482,8 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {safeConversations.length === 0 && (
               <div className="text-center py-12 px-4 space-y-2">
-                <div className="w-12 h-12 rounded-full bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-xl mx-auto">
-                  💬
-                </div>
-                <p className="text-xs text-gray-500 font-medium">
-                  No conversations yet. Accept a connection request to start chatting.
-                </p>
+                <div className="w-12 h-12 rounded-full bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-xl mx-auto">💬</div>
+                <p className="text-xs text-gray-500 font-medium">No conversations yet. Accept a connection request to start chatting.</p>
               </div>
             )}
 
@@ -449,40 +498,27 @@ export default function ChatPage() {
                   key={c.id}
                   onClick={() => setActiveId(c.id)}
                   className={`w-full text-left p-3 rounded-xl flex items-center gap-3 transition-all duration-150 cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#4B2ECF] text-white shadow-md shadow-indigo-100'
-                      : 'hover:bg-white text-gray-700 hover:shadow-sm'
+                    isSelected ? 'bg-[#4B2ECF] text-white shadow-md shadow-indigo-100' : 'hover:bg-white text-gray-700 hover:shadow-sm'
                   }`}
                 >
                   <div className="relative shrink-0">
-                    <div
-                      className={`w-11 h-11 rounded-full overflow-hidden flex items-center justify-center font-bold text-sm ${
-                        isSelected
-                          ? 'bg-white/20 text-white'
-                          : 'bg-gradient-to-br from-[#4B2ECF] to-orange-400 text-white shadow-sm'
-                      }`}
-                    >
+                    <div className={`w-11 h-11 rounded-full overflow-hidden flex items-center justify-center font-bold text-sm ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-gradient-to-br from-[#4B2ECF] to-orange-400 text-white shadow-sm'
+                    }`}>
                       {c.otherUserProfilePicture ? (
                         <img src={c.otherUserProfilePicture} alt="" className="w-full h-full object-cover" />
                       ) : (
                         c.otherUserName?.[0]?.toUpperCase() || 'U'
                       )}
                     </div>
-
-                    <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 ${
-                        isSelected ? 'border-[#4B2ECF]' : 'border-white'
-                      } ${online ? 'bg-green-500' : 'bg-gray-300'}`}
-                      title={online ? 'Online' : 'Offline'}
-                    />
+                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 ${
+                      isSelected ? 'border-[#4B2ECF]' : 'border-white'
+                    } ${online ? 'bg-green-500' : 'bg-gray-300'}`} />
                   </div>
-
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
-                        {c.otherUserName || 'User'}
-                      </p>
-                    </div>
+                    <p className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                      {c.otherUserName || 'User'}
+                    </p>
                     <p className={`text-xs truncate font-medium ${isSelected ? 'text-purple-100' : 'text-gray-400'}`}>
                       {online ? 'Online' : 'Offline'}
                     </p>
@@ -494,16 +530,10 @@ export default function ChatPage() {
         </div>
 
         {/* Chat area */}
-        <div
-          className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${
-            !activeId ? 'hidden lg:flex' : 'flex'
-          }`}
-        >
+        <div className={`flex-1 flex flex-col min-w-0 bg-slate-50/25 ${!activeId ? 'hidden lg:flex' : 'flex'}`}>
           {!activeConversation ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-3 px-4 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-2xl shadow-inner">
-                ✉️
-              </div>
+              <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#4B2ECF] flex items-center justify-center text-2xl shadow-inner">✉️</div>
               <p className="text-sm font-semibold text-gray-500">Select a conversation from the sidebar to start messaging</p>
             </div>
           ) : (
@@ -511,15 +541,10 @@ export default function ChatPage() {
               {/* Header */}
               <div className="px-3 sm:px-5 py-3 border-b border-gray-100 bg-white flex items-center justify-between shadow-xs shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveId(null)}
-                    className="lg:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
-                    aria-label="Back to conversations"
-                  >
+                  <button type="button" onClick={() => setActiveId(null)}
+                    className="lg:hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer">
                     ←
                   </button>
-
                   <div className="relative shrink-0">
                     <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4B2ECF] to-orange-400 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                       {activeConversation?.otherUserProfilePicture ? (
@@ -528,13 +553,10 @@ export default function ChatPage() {
                         activeConversation?.otherUserName?.[0]?.toUpperCase() || 'U'
                       )}
                     </div>
-                    <span
-                      className={`absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-white ${
-                        isUserOnline(activeConversation?.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
-                      }`}
-                    />
+                    <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-white ${
+                      isUserOnline(activeConversation?.otherUserId) ? 'bg-green-500' : 'bg-gray-300'
+                    }`} />
                   </div>
-
                   <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-gray-900 text-sm truncate">{activeConversation?.otherUserName || 'Chat'}</h3>
                     {otherTyping ? (
@@ -565,62 +587,66 @@ export default function ChatPage() {
                   const msgSender = m.senderId ?? m.sender ?? m.userId
                   const isMine = String(msgSender) === String(currentUserId)
                   const isRead = m.status === 'READ'
+                  const isDeleted = m.deletedForEveryone || m.deleted
 
                   return (
                     <div key={m.id || idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div
-                        onContextMenu={(e) => handleContextMenu(e, m)}
-                        onTouchStart={(e) => handleTouchStart(e, m)}
+                        onContextMenu={(e) => !isDeleted && handleContextMenu(e, m)}
+                        onTouchStart={(e) => !isDeleted && handleTouchStart(e, m)}
                         onTouchEnd={handleTouchEnd}
                         onTouchMove={handleTouchMove}
-                        className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative group cursor-pointer select-none ${
-                          isMine
-                            ? 'bg-[#4B2ECF] text-white rounded-br-xs'
-                            : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm'
+                        className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm shadow-xs relative ${
+                          isDeleted
+                            ? 'bg-gray-100 text-gray-400 italic border border-gray-200'
+                            : isMine
+                              ? 'bg-[#4B2ECF] text-white rounded-br-xs cursor-pointer select-none'
+                              : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm cursor-pointer select-none'
                         } ${m._optimistic ? 'opacity-70' : ''}`}
                       >
-                        {m.type === 'IMAGE' && m.fileUrl ? (
+                        {!isDeleted && m.type === 'IMAGE' && m.fileUrl && (
                           <div className="mb-1">
                             <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover" />
                           </div>
-                        ) : m.type === 'VIDEO' && m.fileUrl ? (
+                        )}
+                        {!isDeleted && m.type === 'VIDEO' && m.fileUrl && (
                           <div className="mb-1">
                             <video controls className="rounded-lg max-w-full max-h-60">
                               <source src={m.fileUrl} type="video/mp4" />
                               Your browser does not support the video tag.
                             </video>
                           </div>
-                        ) : null}
-
-                        {m.type === 'TEXT' && m.content && (
-                          <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
                         )}
 
-                        {m.type !== 'TEXT' && m.content && m.content !== m.fileUrl && (
-                          <p className="text-[13px] font-medium leading-relaxed mb-1">{m.content}</p>
+                        {isDeleted ? (
+                          <p className="text-[13px]">🚫 This message was deleted</p>
+                        ) : (
+                          <>
+                            {m.type === 'TEXT' && m.content && (
+                              <p className="leading-relaxed font-medium text-[13.5px] whitespace-pre-wrap word-break">{m.content}</p>
+                            )}
+                            {m.type !== 'TEXT' && m.content && m.content !== m.fileUrl && (
+                              <p className="text-[13px] font-medium leading-relaxed mb-1">{m.content}</p>
+                            )}
+                          </>
                         )}
 
-                        <div
-                          className={`flex items-center gap-1 text-[10px] mt-1 ${
-                            isMine ? 'text-indigo-200 justify-end' : 'text-gray-400'
-                          }`}
-                        >
-                          {m.createdAt && (
-                            <span className="font-medium opacity-90">
-                              {formatMessageTime(m.createdAt)}
-                            </span>
-                          )}
-
-                          {isMine && (
-                            <span className="ml-1 inline-flex items-center text-[12px] font-bold">
-                              {isRead ? (
-                                <span className="text-sky-300 font-black tracking-tighter" title="Read">✓✓</span>
-                              ) : (
-                                <span className="text-gray-300 opacity-80" title="Sent">✓</span>
-                              )}
-                            </span>
-                          )}
-                        </div>
+                        {!isDeleted && (
+                          <div className={`flex items-center gap-1 text-[10px] mt-1 ${isMine ? 'text-indigo-200 justify-end' : 'text-gray-400'}`}>
+                            {m.createdAt && (
+                              <span className="font-medium opacity-90">{formatMessageTime(m.createdAt)}</span>
+                            )}
+                            {isMine && (
+                              <span className="ml-1 inline-flex items-center text-[12px] font-bold">
+                                {isRead ? (
+                                  <span className="text-sky-300 font-black tracking-tighter" title="Read">✓✓</span>
+                                ) : (
+                                  <span className="text-gray-300 opacity-80" title="Sent">✓</span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -630,30 +656,12 @@ export default function ChatPage() {
 
               {/* Input form */}
               <form onSubmit={handleSend} className="p-2 sm:p-3 bg-white border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 shrink-0 w-full">
-                <input
-                  type="file"
-                  ref={cameraInputRef}
-                  onChange={handleFileSelect}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  accept="image/*,video/*"
-                  className="hidden"
-                />
+                <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*" className="hidden" />
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,video/*" className="hidden" />
 
                 {isMobile && (
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    disabled={!connected || isUploading}
-                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
-                    title="Open Camera"
-                    aria-label="Open Camera"
-                  >
+                  <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={!connected || isUploading}
+                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
                       <circle cx="12" cy="13" r="3"/>
@@ -661,14 +669,8 @@ export default function ChatPage() {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!connected || isUploading}
-                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Attach file from gallery"
-                  aria-label="Attach file"
-                >
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!connected || isUploading}
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                   </svg>
@@ -682,11 +684,8 @@ export default function ChatPage() {
                   className="flex-1 min-w-0 w-full px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
 
-                <button
-                  type="submit"
-                  disabled={!connected || !draft.trim() || isUploading}
-                  className="shrink-0 h-10 px-3 sm:px-4 lg:px-5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                >
+                <button type="submit" disabled={!connected || !draft.trim() || isUploading}
+                  className="shrink-0 h-10 px-3 sm:px-4 lg:px-5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95">
                   <span className="hidden sm:inline">Send</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"/>
@@ -722,6 +721,17 @@ export default function ChatPage() {
           onDelete={handleDeleteMessage}
           onView={handleViewMessage}
           onDownload={handleDownloadMessage}
+        />
+      )}
+
+      {/* ✅ NEW: Delete confirm dialog */}
+      {deleteDialog && (
+        <DeleteConfirmDialog
+          message={deleteDialog}
+          isMine={String(deleteDialog.senderId ?? deleteDialog.sender ?? deleteDialog.userId) === String(currentUserId)}
+          onCancel={cancelDelete}
+          onDeleteForMe={() => confirmDelete(false)}
+          onDeleteForEveryone={() => confirmDelete(true)}
         />
       )}
     </DashboardLayout>
