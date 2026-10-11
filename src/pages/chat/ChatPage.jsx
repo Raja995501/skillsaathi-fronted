@@ -15,6 +15,12 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }
 
+// ✅ Safe message ID extractor
+const getMessageId = (msg) => {
+  if (!msg) return null
+  return msg.id ?? msg.messageId ?? null
+}
+
 export default function ChatPage() {
   const { user } = useAuth()
   const { connected, subscribe, publish } = useWebSocket()
@@ -44,14 +50,13 @@ export default function ChatPage() {
   const isMessageMine = useCallback((msg) => {
     if (!msg || !currentUserId) return false
     const senderValue = msg.senderId ?? msg.sender ?? msg.userId ?? ''
+    if (!senderValue) return false
+    if (typeof senderValue === 'object') {
+      const objId = senderValue.id ?? senderValue.userId
+      return String(objId) === String(currentUserId)
+    }
     return String(senderValue) === String(currentUserId)
   }, [currentUserId])
-
-  // ✅ Helper: safe message id extraction
-  const getMessageId = (msg) => {
-    if (!msg) return null
-    return msg.id ?? msg.messageId ?? null
-  }
 
   // === Load conversations ===
   useEffect(() => {
@@ -172,7 +177,7 @@ export default function ChatPage() {
       }
     })
 
-    // ✅ NEW: Delete event subscription
+    // ✅ Delete event subscription
     const unsubDelete = subscribe(`/topic/connection.${activeId}.delete`, (event) => {
       if (!event) return
       const deletedId = event.messageId
@@ -240,6 +245,11 @@ export default function ChatPage() {
 
   // === Context menu handlers ===
   const openContextMenu = (message, x, y) => {
+    // ✅ Strict check — message valid hona chahiye
+    if (!message || typeof message !== 'object' || !message.type) {
+      console.warn('openContextMenu: invalid message')
+      return
+    }
     setContextMenu({ message, position: { x, y } })
   }
 
@@ -291,10 +301,10 @@ export default function ChatPage() {
     alert('Reply feature coming soon!')
   }
 
-  // ✅ UPDATED: null-safe delete message handler
+  // ✅ Delete message handler
   const handleDeleteMessage = (message) => {
     const msgId = getMessageId(message)
-    if (!msgId) {
+    if (!message || !msgId) {
       console.warn('Cannot delete: message has no id', message)
       return
     }
@@ -302,13 +312,13 @@ export default function ChatPage() {
   }
 
   const handleViewMessage = (message) => {
-    if (message.fileUrl) {
+    if (message?.fileUrl) {
       window.open(message.fileUrl, '_blank')
     }
   }
 
   const handleDownloadMessage = async (message) => {
-    if (!message.fileUrl) return
+    if (!message?.fileUrl) return
     try {
       const response = await fetch(message.fileUrl)
       const blob = await response.blob()
@@ -327,7 +337,7 @@ export default function ChatPage() {
     }
   }
 
-  // ✅ UPDATED: null-safe confirm delete
+  // ✅ Confirm delete
   const confirmDelete = async (forEveryone) => {
     const msgId = getMessageId(deleteDialog)
     if (!deleteDialog || !msgId || !activeId) {
@@ -487,6 +497,7 @@ export default function ChatPage() {
   }
 
   const safeConversations = Array.isArray(conversations) ? conversations : []
+  const safeMessages = Array.isArray(messages) ? messages : []
 
   return (
     <DashboardLayout>
@@ -604,7 +615,7 @@ export default function ChatPage() {
 
               {/* Messages */}
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
-                {(Array.isArray(messages) ? messages : []).map((m, idx) => {
+                {safeMessages.map((m, idx) => {
                   if (!m) return null
                   const isMine = isMessageMine(m)
                   const isRead = m.status === 'READ'
@@ -729,8 +740,8 @@ export default function ChatPage() {
         />
       )}
 
-      {/* Context menu */}
-      {contextMenu && (
+      {/* Context menu — ✅ SAFE */}
+      {contextMenu && contextMenu.message && contextMenu.position && (
         <MessageContextMenu
           message={contextMenu.message}
           isMine={isMessageMine(contextMenu.message)}
@@ -745,8 +756,8 @@ export default function ChatPage() {
         />
       )}
 
-      {/* Delete confirm dialog */}
-      {deleteDialog && (
+      {/* Delete confirm dialog — ✅ SAFE */}
+      {deleteDialog && deleteDialog.id != null && (
         <DeleteConfirmDialog
           message={deleteDialog}
           isMine={isMessageMine(deleteDialog)}
