@@ -29,7 +29,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
-  const [deleteDialog, setDeleteDialog] = useState(null)  // ✅ NEW
+  const [deleteDialog, setDeleteDialog] = useState(null)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -39,6 +39,19 @@ export default function ChatPage() {
 
   const currentUserId = user?.id || user?.userId || user?._id
   const isMobile = useMemo(() => isMobileDevice(), [])
+
+  // ✅ Helper: check if message belongs to current user
+  const isMessageMine = useCallback((msg) => {
+    if (!msg || !currentUserId) return false
+    const senderValue = msg.senderId ?? msg.sender ?? msg.userId ?? ''
+    return String(senderValue) === String(currentUserId)
+  }, [currentUserId])
+
+  // ✅ Helper: safe message id extraction
+  const getMessageId = (msg) => {
+    if (!msg) return null
+    return msg.id ?? msg.messageId ?? null
+  }
 
   // === Load conversations ===
   useEffect(() => {
@@ -207,12 +220,12 @@ export default function ChatPage() {
     }
   }, [currentUserId, publish])
 
-  // === Auto-scroll ===
+  // === Auto-scroll to bottom ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // === Cleanup typing ===
+  // === Cleanup typing timeout ===
   useEffect(() => {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
@@ -278,8 +291,13 @@ export default function ChatPage() {
     alert('Reply feature coming soon!')
   }
 
-  // ✅ UPDATED: Open delete confirm dialog
+  // ✅ UPDATED: null-safe delete message handler
   const handleDeleteMessage = (message) => {
+    const msgId = getMessageId(message)
+    if (!msgId) {
+      console.warn('Cannot delete: message has no id', message)
+      return
+    }
     setDeleteDialog(message)
   }
 
@@ -309,25 +327,29 @@ export default function ChatPage() {
     }
   }
 
-  // ✅ NEW: Actual delete
+  // ✅ UPDATED: null-safe confirm delete
   const confirmDelete = async (forEveryone) => {
-    if (!deleteDialog || !activeId) return
-    const msg = deleteDialog
+    const msgId = getMessageId(deleteDialog)
+    if (!deleteDialog || !msgId || !activeId) {
+      console.warn('confirmDelete: invalid state')
+      setDeleteDialog(null)
+      return
+    }
     setDeleteDialog(null)
 
     try {
-      await chatApi.deleteMessage(activeId, msg.id, forEveryone)
+      await chatApi.deleteMessage(activeId, msgId, forEveryone)
 
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
         if (forEveryone) {
           return currentList.map((m) =>
-            String(m.id) === String(msg.id)
+            String(m.id) === String(msgId)
               ? { ...m, deleted: true, deletedForEveryone: true, content: 'This message was deleted', fileUrl: null }
               : m
           )
         } else {
-          return currentList.filter((m) => String(m.id) !== String(msg.id))
+          return currentList.filter((m) => String(m.id) !== String(msgId))
         }
       })
     } catch (err) {
@@ -338,7 +360,7 @@ export default function ChatPage() {
 
   const cancelDelete = () => setDeleteDialog(null)
 
-  // === Send text ===
+  // === Send text message ===
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
@@ -426,7 +448,7 @@ export default function ChatPage() {
 
   const handlePreviewCancel = () => setPendingFile(null)
 
-  // === Typing ===
+  // === Typing handler ===
   const handleTyping = useCallback(
     (value) => {
       setDraft(value)
@@ -584,8 +606,7 @@ export default function ChatPage() {
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                 {(Array.isArray(messages) ? messages : []).map((m, idx) => {
                   if (!m) return null
-                  const msgSender = m.senderId ?? m.sender ?? m.userId
-                  const isMine = String(msgSender) === String(currentUserId)
+                  const isMine = isMessageMine(m)
                   const isRead = m.status === 'READ'
                   const isDeleted = m.deletedForEveryone || m.deleted
 
@@ -712,7 +733,7 @@ export default function ChatPage() {
       {contextMenu && (
         <MessageContextMenu
           message={contextMenu.message}
-          isMine={String(contextMenu.message.senderId ?? contextMenu.message.sender ?? contextMenu.message.userId) === String(currentUserId)}
+          isMine={isMessageMine(contextMenu.message)}
           position={contextMenu.position}
           onClose={closeContextMenu}
           onCopy={handleCopyMessage}
@@ -724,11 +745,11 @@ export default function ChatPage() {
         />
       )}
 
-      {/* ✅ NEW: Delete confirm dialog */}
+      {/* Delete confirm dialog */}
       {deleteDialog && (
         <DeleteConfirmDialog
           message={deleteDialog}
-          isMine={String(deleteDialog.senderId ?? deleteDialog.sender ?? deleteDialog.userId) === String(currentUserId)}
+          isMine={isMessageMine(deleteDialog)}
           onCancel={cancelDelete}
           onDeleteForMe={() => confirmDelete(false)}
           onDeleteForEveryone={() => confirmDelete(true)}
