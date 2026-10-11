@@ -12,7 +12,12 @@ export default function DeleteConfirmDialog({ message, isMine, onCancel, onDelet
   }, [onCancel])
 
   // ✅ Null-safe: message ya id missing ho toh render mat karo
-  if (!message || message.id === undefined || message.id === null) {
+  if (!message) {
+    return null
+  }
+
+  const msgId = message.id ?? message.messageId
+  if (msgId === undefined || msgId === null) {
     return null
   }
 
