@@ -29,7 +29,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
-  const [deleteDialog, setDeleteDialog] = useState(null)  // ✅ NEW
+  const [deleteDialog, setDeleteDialog] = useState(null)
 
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -69,7 +69,9 @@ export default function ChatPage() {
 
     chatApi.getHistory(activeId).then((res) => {
       if (!isMounted) return
-      const historyData = res.data?.data?.content || res.data?.data || []
+      const rawData = res.data?.data?.content || res.data?.data || []
+      // ✅ FIX: Filter null entries
+      const historyData = Array.isArray(rawData) ? rawData.filter((m) => m != null) : []
       setMessages([...historyData].reverse())
     }).catch((err) => console.error("Chat history error:", err))
 
@@ -109,16 +111,19 @@ export default function ChatPage() {
       if (!msg) return
 
       setMessages((prev) => {
-        const currentList = Array.isArray(prev) ? prev : []
+        // ✅ FIX: Filter null entries
+        const currentList = (Array.isArray(prev) ? prev : []).filter((m) => m != null)
 
-        if (msg.id && currentList.some((m) => String(m.id) === String(msg.id))) {
+        // ✅ FIX: Null-safe .some()
+        if (msg.id && currentList.some((m) => m && String(m.id) === String(msg.id))) {
           return currentList
         }
 
         const msgSender = msg.senderId ?? msg.sender ?? msg.userId
         if (String(msgSender) === String(currentUserId)) {
+          // ✅ FIX: Null-safe .findIndex()
           const optIdx = currentList.findIndex(
-            (m) => typeof m.id === 'string' && m.id.startsWith('temp-') && m.type === msg.type
+            (m) => m && typeof m.id === 'string' && m.id.startsWith('temp-') && m.type === msg.type
           )
           if (optIdx !== -1) {
             const updated = [...currentList]
@@ -152,6 +157,7 @@ export default function ChatPage() {
         setMessages((prev) => {
           const currentList = Array.isArray(prev) ? prev : []
           return currentList.map((m) => {
+            if (!m) return m
             const msgSender = m.senderId ?? m.sender ?? m.userId
             return String(msgSender) === String(currentUserId) ? { ...m, status: 'READ' } : m
           })
@@ -159,7 +165,7 @@ export default function ChatPage() {
       }
     })
 
-    // ✅ NEW: Delete event subscription
+    // Delete event subscription
     const unsubDelete = subscribe(`/topic/connection.${activeId}.delete`, (event) => {
       if (!event) return
       const deletedId = event.messageId
@@ -170,13 +176,13 @@ export default function ChatPage() {
         const currentList = Array.isArray(prev) ? prev : []
         if (forEveryone) {
           return currentList.map((m) =>
-            String(m.id) === String(deletedId)
+            m && String(m.id) === String(deletedId)
               ? { ...m, deleted: true, deletedForEveryone: true, content: 'This message was deleted', fileUrl: null }
               : m
           )
         } else {
           if (String(deletedByUserId) === String(currentUserId)) {
-            return currentList.filter((m) => String(m.id) !== String(deletedId))
+            return currentList.filter((m) => m && String(m.id) !== String(deletedId))
           }
           return currentList
         }
@@ -278,19 +284,23 @@ export default function ChatPage() {
     alert('Reply feature coming soon!')
   }
 
-  // ✅ UPDATED: Open delete confirm dialog
+  // ✅ FIX: Null-safe delete message handler
   const handleDeleteMessage = (message) => {
+    if (!message || !message.id) {
+      console.warn('Cannot delete: invalid message')
+      return
+    }
     setDeleteDialog(message)
   }
 
   const handleViewMessage = (message) => {
-    if (message.fileUrl) {
+    if (message?.fileUrl) {
       window.open(message.fileUrl, '_blank')
     }
   }
 
   const handleDownloadMessage = async (message) => {
-    if (!message.fileUrl) return
+    if (!message?.fileUrl) return
     try {
       const response = await fetch(message.fileUrl)
       const blob = await response.blob()
@@ -309,9 +319,9 @@ export default function ChatPage() {
     }
   }
 
-  // ✅ NEW: Actual delete
+  // ✅ FIX: Null-safe confirm delete
   const confirmDelete = async (forEveryone) => {
-    if (!deleteDialog || !activeId) return
+    if (!deleteDialog || !deleteDialog.id || !activeId) return
     const msg = deleteDialog
     setDeleteDialog(null)
 
@@ -322,12 +332,12 @@ export default function ChatPage() {
         const currentList = Array.isArray(prev) ? prev : []
         if (forEveryone) {
           return currentList.map((m) =>
-            String(m.id) === String(msg.id)
+            m && String(m.id) === String(msg.id)
               ? { ...m, deleted: true, deletedForEveryone: true, content: 'This message was deleted', fileUrl: null }
               : m
           )
         } else {
-          return currentList.filter((m) => String(m.id) !== String(msg.id))
+          return currentList.filter((m) => m && String(m.id) !== String(msg.id))
         }
       })
     } catch (err) {
@@ -709,7 +719,7 @@ export default function ChatPage() {
       )}
 
       {/* Context menu */}
-      {contextMenu && (
+      {contextMenu && contextMenu.message && (
         <MessageContextMenu
           message={contextMenu.message}
           isMine={String(contextMenu.message.senderId ?? contextMenu.message.sender ?? contextMenu.message.userId) === String(currentUserId)}
@@ -724,8 +734,8 @@ export default function ChatPage() {
         />
       )}
 
-      {/* ✅ NEW: Delete confirm dialog */}
-      {deleteDialog && (
+      {/* Delete confirm dialog */}
+      {deleteDialog && deleteDialog.id && (
         <DeleteConfirmDialog
           message={deleteDialog}
           isMine={String(deleteDialog.senderId ?? deleteDialog.sender ?? deleteDialog.userId) === String(currentUserId)}
