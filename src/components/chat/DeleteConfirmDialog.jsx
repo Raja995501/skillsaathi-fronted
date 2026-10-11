@@ -36,7 +36,7 @@ export default function DeleteConfirmDialog({ message, isMine, onCancel, onDelet
         </div>
 
         <div className="px-3 pb-4 flex flex-col gap-2">
-          {/* Delete for me */}
+          {/* Delete for me — sabke liye */}
           <button
             type="button"
             onClick={onDeleteForMe}
@@ -45,7 +45,7 @@ export default function DeleteConfirmDialog({ message, isMine, onCancel, onDelet
             Delete for me
           </button>
 
-          {/* Delete for everyone — only for sender */}
+          {/* Delete for everyone — sirf sender ke liye */}
           {isMine && (
             <button
               type="button"
@@ -56,7 +56,6 @@ export default function DeleteConfirmDialog({ message, isMine, onCancel, onDelet
             </button>
           )}
 
-          {/* Cancel */}
           <button
             type="button"
             onClick={onCancel}

@@ -89,7 +89,7 @@ export default function MessageContextMenu({
       className="bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 min-w-[180px] max-w-[220px]"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Text message options */}
+      {/* ===== TEXT MESSAGE ===== */}
       {isText && (
         <>
           {message.content && (
@@ -111,21 +111,18 @@ export default function MessageContextMenu({
             label="Reply"
             onClick={() => onReply?.(message)}
           />
-          {isMine && (
-            <>
-              <div className="h-px bg-gray-100 my-1" />
-              <MenuButton
-                icon="🗑️"
-                label="Delete"
-                danger
-                onClick={() => onDelete?.(message)}
-              />
-            </>
-          )}
+          {/* ✅ Delete — sabke liye (mine + received) */}
+          <div className="h-px bg-gray-100 my-1" />
+          <MenuButton
+            icon="🗑️"
+            label="Delete"
+            danger
+            onClick={() => onDelete?.(message)}
+          />
         </>
       )}
 
-      {/* Image message options */}
+      {/* ===== IMAGE MESSAGE ===== */}
       {isImage && (
         <>
           <MenuButton
@@ -143,21 +140,18 @@ export default function MessageContextMenu({
             label="Reply"
             onClick={() => onReply?.(message)}
           />
-          {isMine && (
-            <>
-              <div className="h-px bg-gray-100 my-1" />
-              <MenuButton
-                icon="🗑️"
-                label="Delete"
-                danger
-                onClick={() => onDelete?.(message)}
-              />
-            </>
-          )}
+          {/* ✅ Delete — sabke liye */}
+          <div className="h-px bg-gray-100 my-1" />
+          <MenuButton
+            icon="🗑️"
+            label="Delete"
+            danger
+            onClick={() => onDelete?.(message)}
+          />
         </>
       )}
 
-      {/* Video message options */}
+      {/* ===== VIDEO MESSAGE ===== */}
       {isVideo && (
         <>
           <MenuButton
@@ -175,17 +169,14 @@ export default function MessageContextMenu({
             label="Reply"
             onClick={() => onReply?.(message)}
           />
-          {isMine && (
-            <>
-              <div className="h-px bg-gray-100 my-1" />
-              <MenuButton
-                icon="🗑️"
-                label="Delete"
-                danger
-                onClick={() => onDelete?.(message)}
-              />
-            </>
-          )}
+          {/* ✅ Delete — sabke liye */}
+          <div className="h-px bg-gray-100 my-1" />
+          <MenuButton
+            icon="🗑️"
+            label="Delete"
+            danger
+            onClick={() => onDelete?.(message)}
+          />
         </>
       )}
     </div>
