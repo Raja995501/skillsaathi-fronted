@@ -9,7 +9,6 @@ import MediaPreviewModal from '../../components/chat/MediaPreviewModal.jsx'
 import MessageContextMenu from '../../components/chat/MessageContextMenu.jsx'
 import DeleteConfirmDialog from '../../components/chat/DeleteConfirmDialog.jsx'
 
-// Detect mobile device
 const isMobileDevice = () => {
   if (typeof navigator === 'undefined') return false
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -31,97 +30,72 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState(null)
   const [deleteDialog, setDeleteDialog] = useState(null)
 
+  // NEW: Edit + Reply
+  const [editingMessage, setEditingMessage] = useState(null)
+  const [replyingTo, setReplyingTo] = useState(null)
+
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
   const longPressTimerRef = useRef(null)
+  const inputRef = useRef(null)
 
   const currentUserId = user?.id || user?.userId || user?._id
   const isMobile = useMemo(() => isMobileDevice(), [])
 
-  // === Load conversations ===
   useEffect(() => {
     let isMounted = true
     connectionApi.list('ACCEPTED').then((res) => {
       if (!isMounted) return
       const list = res.data?.data || res.data || []
       setConversations(list)
-      if (!activeId && list.length > 0) {
-        setActiveId(list[0].id)
-      }
+      if (!activeId && list.length > 0) setActiveId(list[0].id)
     }).catch((err) => console.error("Conversations fetch error:", err))
-
     return () => { isMounted = false }
   }, [])
 
-  // === Update URL with activeId ===
   useEffect(() => {
-    if (activeId) {
-      setSearchParams({ connectionId: activeId }, { replace: true })
-    }
+    if (activeId) setSearchParams({ connectionId: activeId }, { replace: true })
   }, [activeId, setSearchParams])
 
-  // === Load chat history ===
   useEffect(() => {
     if (!activeId) return
     let isMounted = true
-
     chatApi.getHistory(activeId).then((res) => {
       if (!isMounted) return
       const rawData = res.data?.data?.content || res.data?.data || []
-      // ✅ FIX: Filter null entries
       const historyData = Array.isArray(rawData) ? rawData.filter((m) => m != null) : []
       setMessages([...historyData].reverse())
     }).catch((err) => console.error("Chat history error:", err))
-
     chatApi.markAsRead(activeId).catch(() => {})
     setOtherTyping(false)
-
     return () => { isMounted = false }
   }, [activeId])
 
-  // === Presence subscription ===
   useEffect(() => {
     if (!connected) return
-
     const unsubPresence = subscribe('/topic/presence', (event) => {
       if (!event) return
       const targetUser = event.userId
       if (targetUser != null) {
-        setOnlineUsers((prev) => ({
-          ...prev,
-          [String(targetUser)]: Boolean(event.online),
-        }))
+        setOnlineUsers((prev) => ({ ...prev, [String(targetUser)]: Boolean(event.online) }))
       }
     })
-
-    if (currentUserId) {
-      publish('/app/user.presence', { userId: currentUserId, online: true })
-    }
-
+    if (currentUserId) publish('/app/user.presence', { userId: currentUserId, online: true })
     return () => { if (unsubPresence) unsubPresence() }
   }, [connected, subscribe, publish, currentUserId])
 
-  // === Messages / Typing / Read / Delete subscriptions ===
   useEffect(() => {
     if (!connected || !activeId) return
 
     const unsubMessages = subscribe(`/topic/connection.${activeId}`, (msg) => {
       if (!msg) return
-
       setMessages((prev) => {
-        // ✅ FIX: Filter null entries
         const currentList = (Array.isArray(prev) ? prev : []).filter((m) => m != null)
-
-        // ✅ FIX: Null-safe .some()
-        if (msg.id && currentList.some((m) => m && String(m.id) === String(msg.id))) {
-          return currentList
-        }
-
+        if (msg.id && currentList.some((m) => m && String(m.id) === String(msg.id))) return currentList
         const msgSender = msg.senderId ?? msg.sender ?? msg.userId
         if (String(msgSender) === String(currentUserId)) {
-          // ✅ FIX: Null-safe .findIndex()
           const optIdx = currentList.findIndex(
             (m) => m && typeof m.id === 'string' && m.id.startsWith('temp-') && m.type === msg.type
           )
@@ -131,21 +105,16 @@ export default function ChatPage() {
             return updated
           }
         }
-
         return [...currentList, msg]
       })
-
       const msgSender = msg.senderId ?? msg.sender ?? msg.userId
-      if (String(msgSender) !== String(currentUserId)) {
-        chatApi.markAsRead(activeId).catch(() => {})
-      }
+      if (String(msgSender) !== String(currentUserId)) chatApi.markAsRead(activeId).catch(() => {})
     })
 
     const unsubTyping = subscribe(`/topic/connection.${activeId}.typing`, (event) => {
       if (!event) return
       const eventSender = event.userId ?? event.senderId ?? event.sender ?? event.id
       const isTypingState = event.typing ?? event.isTyping
-
       if (eventSender != null && String(eventSender) !== String(currentUserId)) {
         setOtherTyping(Boolean(isTypingState))
       }
@@ -165,13 +134,11 @@ export default function ChatPage() {
       }
     })
 
-    // Delete event subscription
     const unsubDelete = subscribe(`/topic/connection.${activeId}.delete`, (event) => {
       if (!event) return
       const deletedId = event.messageId
       const forEveryone = Boolean(event.forEveryone)
       const deletedByUserId = event.deletedByUserId
-
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
         if (forEveryone) {
@@ -189,41 +156,44 @@ export default function ChatPage() {
       })
     })
 
+    const unsubEdit = subscribe(`/topic/connection.${activeId}.edit`, (event) => {
+      if (!event || !event.id) return
+      setMessages((prev) => {
+        const currentList = Array.isArray(prev) ? prev : []
+        return currentList.map((m) =>
+          m && String(m.id) === String(event.id) ? { ...m, ...event } : m
+        )
+      })
+    })
+
     return () => {
       if (unsubMessages) unsubMessages()
       if (unsubTyping) unsubTyping()
       if (unsubRead) unsubRead()
       if (unsubDelete) unsubDelete()
+      if (unsubEdit) unsubEdit()
     }
   }, [activeId, connected, subscribe, currentUserId])
 
-  // === Beforeunload presence ===
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (currentUserId) {
-        publish('/app/user.presence', { userId: currentUserId, online: false })
-      }
+      if (currentUserId) publish('/app/user.presence', { userId: currentUserId, online: false })
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      if (currentUserId) {
-        publish('/app/user.presence', { userId: currentUserId, online: false })
-      }
+      if (currentUserId) publish('/app/user.presence', { userId: currentUserId, online: false })
     }
   }, [currentUserId, publish])
 
-  // === Auto-scroll ===
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // === Cleanup typing ===
   useEffect(() => {
     return () => clearTimeout(typingTimeoutRef.current)
   }, [])
 
-  // === Close context menu on scroll ===
   useEffect(() => {
     if (!contextMenu) return
     const handleScroll = () => setContextMenu(null)
@@ -231,11 +201,7 @@ export default function ChatPage() {
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [contextMenu])
 
-  // === Context menu handlers ===
-  const openContextMenu = (message, x, y) => {
-    setContextMenu({ message, position: { x, y } })
-  }
-
+  const openContextMenu = (message, x, y) => setContextMenu({ message, position: { x, y } })
   const closeContextMenu = () => setContextMenu(null)
 
   const handleContextMenu = (e, message) => {
@@ -248,55 +214,45 @@ export default function ChatPage() {
     const touch = e.touches[0]
     const x = touch.clientX
     const y = touch.clientY
-    longPressTimerRef.current = setTimeout(() => {
-      openContextMenu(message, x, y)
-    }, 500)
+    longPressTimerRef.current = setTimeout(() => { openContextMenu(message, x, y) }, 500)
   }
-
   const handleTouchEnd = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
+    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null }
   }
-
   const handleTouchMove = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
+    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null }
   }
 
-  // === Context menu actions ===
   const handleCopyMessage = async (content) => {
-    try {
-      await navigator.clipboard.writeText(content)
-    } catch (err) {
-      console.error('Copy failed:', err)
-    }
+    try { await navigator.clipboard.writeText(content) } catch (err) { console.error('Copy failed:', err) }
   }
 
   const handleEditMessage = (message) => {
-    alert('Edit feature coming soon!')
+    if (!message || !message.id) return
+    if (message.type !== 'TEXT') { alert('Only text messages can be edited'); return }
+    setEditingMessage(message)
+    setDraft(message.content || '')
+    setReplyingTo(null)
+    setTimeout(() => inputRef.current?.focus(), 100)
   }
 
   const handleReplyMessage = (message) => {
-    alert('Reply feature coming soon!')
+    if (!message || !message.id) return
+    setReplyingTo(message)
+    setEditingMessage(null)
+    setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  // ✅ FIX: Null-safe delete message handler
+  const cancelEdit = () => { setEditingMessage(null); setDraft('') }
+  const cancelReply = () => setReplyingTo(null)
+
   const handleDeleteMessage = (message) => {
-    if (!message || !message.id) {
-      console.warn('Cannot delete: invalid message')
-      return
-    }
+    if (!message || !message.id) { console.warn('Cannot delete: invalid message'); return }
     setDeleteDialog(message)
   }
 
   const handleViewMessage = (message) => {
-    if (message?.fileUrl) {
-      window.open(message.fileUrl, '_blank')
-    }
+    if (message?.fileUrl) window.open(message.fileUrl, '_blank')
   }
 
   const handleDownloadMessage = async (message) => {
@@ -307,8 +263,7 @@ export default function ChatPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const filename = message.content || (message.type === 'VIDEO' ? 'video.mp4' : 'image.jpg')
-      a.download = filename
+      a.download = message.content || (message.type === 'VIDEO' ? 'video.mp4' : 'image.jpg')
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -319,15 +274,12 @@ export default function ChatPage() {
     }
   }
 
-  // ✅ FIX: Null-safe confirm delete
   const confirmDelete = async (forEveryone) => {
     if (!deleteDialog || !deleteDialog.id || !activeId) return
     const msg = deleteDialog
     setDeleteDialog(null)
-
     try {
       await chatApi.deleteMessage(activeId, msg.id, forEveryone)
-
       setMessages((prev) => {
         const currentList = Array.isArray(prev) ? prev : []
         if (forEveryone) {
@@ -348,14 +300,30 @@ export default function ChatPage() {
 
   const cancelDelete = () => setDeleteDialog(null)
 
-  // === Send text ===
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeId) return
-
     const messageContent = draft.trim()
-    setDraft('')
 
+    if (editingMessage) {
+      try {
+        const res = await chatApi.editMessage(activeId, editingMessage.id, messageContent)
+        const updated = res.data?.data || res.data
+        setMessages((prev) => {
+          const currentList = Array.isArray(prev) ? prev : []
+          return currentList.map((m) => m && String(m.id) === String(updated.id) ? { ...m, ...updated } : m)
+        })
+      } catch (err) {
+        console.error('Edit failed:', err)
+        alert('Edit failed. Only messages within 15 minutes can be edited.')
+      } finally {
+        setEditingMessage(null)
+        setDraft('')
+      }
+      return
+    }
+
+    setDraft('')
     const optimisticMsg = {
       id: `temp-${Date.now()}`,
       connectionId: activeId,
@@ -366,23 +334,23 @@ export default function ChatPage() {
       status: 'SENT',
       createdAt: new Date().toISOString(),
       _optimistic: true,
+      replyToId: replyingTo?.id || null,
+      replyToContent: replyingTo?.content || null,
+      replyToSenderName: replyingTo?.senderName || null,
+      replyToType: replyingTo?.type || null,
     }
     setMessages((prev) => [...prev, optimisticMsg])
-
     publish('/app/chat.send', {
       connectionId: activeId,
       content: messageContent,
       senderId: currentUserId,
       type: 'TEXT',
+      replyToId: replyingTo?.id || null,
     })
-    publish('/app/chat.typing', {
-      connectionId: activeId,
-      typing: false,
-      userId: currentUserId,
-    })
+    publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
+    setReplyingTo(null)
   }
 
-  // === File select → preview ===
   const handleFileSelect = (e) => {
     const file = e.target.files[0]
     if (!file || !activeId) return
@@ -391,16 +359,13 @@ export default function ChatPage() {
     if (cameraInputRef.current) cameraInputRef.current.value = ''
   }
 
-  // === Preview send ===
   const handlePreviewSend = async (caption) => {
     if (!pendingFile || !activeId) return
-
     try {
       setIsUploading(true)
       const res = await chatApi.uploadMedia(pendingFile)
       const responseData = res.data?.data || res.data
       const { fileUrl, type } = responseData
-
       const mediaType = type || (pendingFile.type.startsWith('video') ? 'VIDEO' : 'IMAGE')
       const messageContent = caption || pendingFile.name
 
@@ -414,18 +379,22 @@ export default function ChatPage() {
         status: 'SENT',
         createdAt: new Date().toISOString(),
         _optimistic: true,
+        replyToId: replyingTo?.id || null,
+        replyToContent: replyingTo?.content || null,
+        replyToSenderName: replyingTo?.senderName || null,
+        replyToType: replyingTo?.type || null,
       }
       setMessages((prev) => [...prev, optimisticMsg])
-
       publish('/app/chat.send', {
         connectionId: activeId,
         content: messageContent,
         fileUrl: fileUrl,
         type: mediaType,
         senderId: currentUserId,
+        replyToId: replyingTo?.id || null,
       })
-
       setPendingFile(null)
+      setReplyingTo(null)
     } catch (err) {
       console.error("Media upload failed:", err)
       alert("File upload failed. Please try again.")
@@ -434,20 +403,20 @@ export default function ChatPage() {
     }
   }
 
-  const handlePreviewCancel = () => setPendingFile(null)
+  // 👇 PART 2 CONTINUES FROM HERE — ISKE BAAD KA CODE NEXT MESSAGE MEIN HAI
+    const handlePreviewCancel = () => setPendingFile(null)
 
-  // === Typing ===
   const handleTyping = useCallback(
     (value) => {
       setDraft(value)
-      if (!activeId) return
+      if (!activeId || editingMessage) return
       publish('/app/chat.typing', { connectionId: activeId, typing: true, userId: currentUserId })
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
         publish('/app/chat.typing', { connectionId: activeId, typing: false, userId: currentUserId })
       }, 2000)
     },
-    [activeId, publish, currentUserId]
+    [activeId, publish, currentUserId, editingMessage]
   )
 
   const activeConversation = useMemo(
@@ -614,6 +583,18 @@ export default function ChatPage() {
                               : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm cursor-pointer select-none'
                         } ${m._optimistic ? 'opacity-70' : ''}`}
                       >
+                        {/* REPLY QUOTE */}
+                        {m.replyToId && m.replyToContent && !isDeleted && (
+                          <div className={`mb-1.5 pl-2 border-l-2 ${isMine ? 'border-indigo-300/60 bg-white/10' : 'border-[#4B2ECF]/40 bg-purple-50/50'} rounded-sm py-1 px-2`}>
+                            <p className={`text-[10px] font-bold ${isMine ? 'text-indigo-100' : 'text-[#4B2ECF]'}`}>
+                              {m.replyToSenderName || 'User'}
+                            </p>
+                            <p className={`text-[11px] truncate ${isMine ? 'text-indigo-100/90' : 'text-gray-600'}`}>
+                              {m.replyToType === 'IMAGE' ? '📷 Image' : m.replyToType === 'VIDEO' ? '🎥 Video' : m.replyToContent}
+                            </p>
+                          </div>
+                        )}
+
                         {!isDeleted && m.type === 'IMAGE' && m.fileUrl && (
                           <div className="mb-1">
                             <img src={m.fileUrl} alt="Shared media" className="rounded-lg max-w-full max-h-60 object-cover" />
@@ -643,6 +624,7 @@ export default function ChatPage() {
 
                         {!isDeleted && (
                           <div className={`flex items-center gap-1 text-[10px] mt-1 ${isMine ? 'text-indigo-200 justify-end' : 'text-gray-400'}`}>
+                            {m.edited && <span className="italic opacity-80">edited</span>}
                             {m.createdAt && (
                               <span className="font-medium opacity-90">{formatMessageTime(m.createdAt)}</span>
                             )}
@@ -664,12 +646,33 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* EDIT / REPLY PREVIEW BAR */}
+              {(editingMessage || replyingTo) && (
+                <div className="px-3 sm:px-4 py-2 bg-purple-50 border-t border-purple-100 flex items-center justify-between gap-2 shrink-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-[#4B2ECF]">
+                      {editingMessage ? '✏️ Editing message' : `↩️ Replying to ${replyingTo?.senderName || 'User'}`}
+                    </p>
+                    <p className="text-[11px] text-gray-600 truncate">
+                      {editingMessage?.content || replyingTo?.content || ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={editingMessage ? cancelEdit : cancelReply}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-purple-100 text-gray-500 cursor-pointer text-lg"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               {/* Input form */}
               <form onSubmit={handleSend} className="p-2 sm:p-3 bg-white border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 shrink-0 w-full">
                 <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*" className="hidden" />
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,video/*" className="hidden" />
 
-                {isMobile && (
+                {isMobile && !editingMessage && (
                   <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={!connected || isUploading}
                     className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -679,24 +682,27 @@ export default function ChatPage() {
                   </button>
                 )}
 
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!connected || isUploading}
-                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                  </svg>
-                </button>
+                {!editingMessage && (
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!connected || isUploading}
+                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:text-[#4B2ECF] hover:bg-purple-50 transition-colors disabled:opacity-40 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                  </button>
+                )}
 
                 <input
+                  ref={inputRef}
                   value={draft}
                   onChange={(e) => handleTyping(e.target.value)}
-                  placeholder={connected ? (isUploading ? 'Uploading...' : 'Type a message...') : 'Connecting...'}
+                  placeholder={connected ? (isUploading ? 'Uploading...' : editingMessage ? 'Edit message...' : 'Type a message...') : 'Connecting...'}
                   disabled={!connected || isUploading}
                   className="flex-1 min-w-0 w-full px-3 sm:px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm font-medium text-gray-800 outline-none focus:border-[#4B2ECF] focus:bg-white disabled:bg-gray-100 transition-all"
                 />
 
                 <button type="submit" disabled={!connected || !draft.trim() || isUploading}
                   className="shrink-0 h-10 px-3 sm:px-4 lg:px-5 rounded-xl bg-[#4B2ECF] hover:bg-[#3b22ab] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95">
-                  <span className="hidden sm:inline">Send</span>
+                  <span className="hidden sm:inline">{editingMessage ? 'Save' : 'Send'}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"/>
                     <path d="M22 2 11 13"/>
