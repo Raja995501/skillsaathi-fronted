@@ -33,7 +33,7 @@ export default function ChatPage() {
   const [editingMessage, setEditingMessage] = useState(null)
   const [replyingTo, setReplyingTo] = useState(null)
 
-  // ✅ NEW: Last message + unread count
+  // Last message + unread count
   const [lastMessages, setLastMessages] = useState({})
   const [unreadCounts, setUnreadCounts] = useState({})
 
@@ -64,7 +64,7 @@ export default function ChatPage() {
     if (activeId) setSearchParams({ connectionId: activeId }, { replace: true })
   }, [activeId, setSearchParams])
 
-  // ✅ Clear unread count when opening chat
+  // Clear unread count when opening chat
   useEffect(() => {
     if (activeId) {
       setUnreadCounts((prev) => ({ ...prev, [String(activeId)]: 0 }))
@@ -81,8 +81,6 @@ export default function ChatPage() {
       const historyData = Array.isArray(rawData) ? rawData.filter((m) => m != null) : []
       const ordered = [...historyData].reverse()
       setMessages(ordered)
-
-      // Save last message
       const last = ordered.length > 0 ? ordered[ordered.length - 1] : null
       if (last) {
         setLastMessages((prev) => ({ ...prev, [String(activeId)]: last }))
@@ -107,7 +105,7 @@ export default function ChatPage() {
     return () => { if (unsubPresence) unsubPresence() }
   }, [connected, subscribe, publish, currentUserId])
 
-  // Messages / Typing / Read / Delete / Edit subscriptions
+  // Messages / Typing / Read / Delete / Edit subscriptions (for active connection)
   useEffect(() => {
     if (!connected || !activeId) return
 
@@ -129,10 +127,7 @@ export default function ChatPage() {
         }
         return [...currentList, msg]
       })
-
-      // Save last message
       setLastMessages((prev) => ({ ...prev, [String(activeId)]: msg }))
-
       const msgSender = msg.senderId ?? msg.sender ?? msg.userId
       if (String(msgSender) !== String(currentUserId)) chatApi.markAsRead(activeId).catch(() => {})
     })
@@ -190,7 +185,6 @@ export default function ChatPage() {
           m && String(m.id) === String(event.id) ? { ...m, ...event } : m
         )
       })
-      // Update last message
       setLastMessages((prev) => ({ ...prev, [String(activeId)]: event }))
     })
 
@@ -203,21 +197,37 @@ export default function ChatPage() {
     }
   }, [activeId, connected, subscribe, currentUserId])
 
-  // ✅ Global new message listener for OTHER connections (for unread count + preview)
+  // ✅ NEW: Personal topic subscription — for unread badges (any conversation)
   useEffect(() => {
     if (!connected || !currentUserId) return
 
-    // Listen on the user's conversation topics
-    // Note: this only fires for the active conversation topic.
-    // For other conversations, backend needs a per-user topic. Skipping for now.
-    // This means unread badge only updates for the ACTIVE conversation.
-    // OK for MVP.
-  }, [connected, currentUserId])
+    const unsubPersonal = subscribe(`/topic/user.${currentUserId}.new-message`, (msg) => {
+      if (!msg) return
+      const msgConnectionId = msg.connectionId
+      if (!msgConnectionId) return
+
+      // Update last message for that conversation
+      setLastMessages((prev) => ({ ...prev, [String(msgConnectionId)]: msg }))
+
+      // If not the currently open chat → increment unread count
+      if (String(msgConnectionId) !== String(activeId)) {
+        setUnreadCounts((prev) => {
+          const key = String(msgConnectionId)
+          return { ...prev, [key]: (prev[key] || 0) + 1 }
+        })
+      }
+    })
+
+    return () => {
+      if (unsubPersonal) unsubPersonal()
+    }
+  }, [connected, currentUserId, activeId, subscribe])
 
   // Beforeunload
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (currentUserId) publish('/app/user.presence', { userId: currentUserId, online: false })
+
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
@@ -241,6 +251,7 @@ export default function ChatPage() {
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [contextMenu])
 
+  // Context menu handlers
   const openContextMenu = (message, x, y) => setContextMenu({ message, position: { x, y } })
   const closeContextMenu = () => setContextMenu(null)
 
@@ -486,11 +497,11 @@ export default function ChatPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
   }
 
-  // ✅ NEW: Short time formatter (WhatsApp-style)
+  // Short time formatter (WhatsApp-style)
   const formatShortTime = (dateString) => {
     if (!dateString) return ''
     let fixed = dateString
-    if (typeof dateString === 'string' && !fixed.endsWith('Z') && !fixed.includes('+')) {
+    if (typeof fixed === 'string' && !fixed.endsWith('Z') && !fixed.includes('+')) {
       fixed = fixed + 'Z'
     }
     const d = new Date(fixed)
@@ -508,7 +519,7 @@ export default function ChatPage() {
     }
   }
 
-  // ✅ NEW: Preview text for last message
+  // Preview text for last message
   const getLastMessagePreview = (connectionId) => {
     const msg = lastMessages[String(connectionId)]
     if (!msg) return null
@@ -525,7 +536,7 @@ export default function ChatPage() {
 
   const safeConversations = Array.isArray(conversations) ? conversations : []
 
-  // ✅ NEW: Sort by latest message time (WhatsApp-style)
+  // Sort by latest message time (WhatsApp-style)
   const sortedConversations = useMemo(() => {
     return [...safeConversations].sort((a, b) => {
       const aMsg = lastMessages[String(a.id)]
@@ -574,7 +585,7 @@ export default function ChatPage() {
                     isSelected ? 'bg-[#4B2ECF] text-white shadow-md shadow-indigo-100' : 'hover:bg-white text-gray-700 hover:shadow-sm'
                   }`}
                 >
-                  {/* Avatar */}
+                  {/* Avatar + badge */}
                   <div className="relative shrink-0">
                     <div className={`w-11 h-11 rounded-full overflow-hidden flex items-center justify-center font-bold text-sm ${
                       isSelected ? 'bg-white/20 text-white' : 'bg-gradient-to-br from-[#4B2ECF] to-orange-400 text-white shadow-sm'
@@ -585,12 +596,11 @@ export default function ChatPage() {
                         c.otherUserName?.[0]?.toUpperCase() || 'U'
                       )}
                     </div>
-                    {/* Online dot */}
                     <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 ${
                       isSelected ? 'border-[#4B2ECF]' : 'border-white'
                     } ${online ? 'bg-green-500' : 'bg-gray-300'}`} />
 
-                    {/* ✅ Unread badge */}
+                    {/* Unread badge */}
                     {unread > 0 && (
                       <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                         isSelected
@@ -703,7 +713,6 @@ export default function ChatPage() {
                               : 'bg-white border border-gray-100 text-gray-900 rounded-bl-xs shadow-sm cursor-pointer select-none'
                         } ${m._optimistic ? 'opacity-70' : ''}`}
                       >
-                        {/* REPLY QUOTE */}
                         {m.replyToId && m.replyToContent && !isDeleted && (
                           <div className={`mb-1.5 pl-2 border-l-2 ${isMine ? 'border-indigo-300/60 bg-white/10' : 'border-[#4B2ECF]/40 bg-purple-50/50'} rounded-sm py-1 px-2`}>
                             <p className={`text-[10px] font-bold ${isMine ? 'text-indigo-100' : 'text-[#4B2ECF]'}`}>
